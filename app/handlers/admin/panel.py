@@ -65,7 +65,7 @@ async def approve_topup(
     callback: CallbackQuery, callback_data: AdminCB, services: Services, bot
 ) -> None:
     try:
-        user_id_str, amount_str = callback_data.value.split(":")
+        user_id_str, amount_str = callback_data.value.split("-")
         user_id, amount = int(user_id_str), int(amount_str)
     except ValueError:
         await callback.answer("داده نامعتبر.", show_alert=True)

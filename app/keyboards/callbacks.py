@@ -10,7 +10,7 @@ class MenuCB(CallbackData, prefix="menu"):
 
 class DiamondCB(CallbackData, prefix="dia"):
     action: str  # method | plan
-    value: str = ""  # plan code or "uid"/"account"
+    value: str | None = None  # plan code or "uid"/"account"
 
 
 class AccountCB(CallbackData, prefix="acc"):
@@ -21,7 +21,7 @@ class AccountCB(CallbackData, prefix="acc"):
 
 class NavCB(CallbackData, prefix="nav"):
     action: str  # back | cancel | page
-    target: str = ""
+    target: str | None = None
     page: int = 1
 
 
@@ -36,7 +36,7 @@ class AdminOrderCB(CallbackData, prefix="aord"):
 
 class AdminCB(CallbackData, prefix="adm"):
     action: str
-    value: str = ""
+    value: str | None = None
     page: int = 1
 
 

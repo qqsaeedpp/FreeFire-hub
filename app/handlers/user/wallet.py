@@ -90,7 +90,7 @@ async def topup_receipt(
     kb = InlineKeyboardBuilder()
     kb.button(
         text="✅ تایید شارژ",
-        callback_data=AdminCB(action="approve_topup", value=f"{db_user.id}:{amount}"),
+        callback_data=AdminCB(action="approve_topup", value=f"{db_user.id}-{amount}"),
     )
     caption = (
         f"💳 <b>درخواست شارژ کیف پول</b>\n"
