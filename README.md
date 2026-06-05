@@ -52,8 +52,9 @@ app/
 ## 🚀 اجرا با Docker (پیشنهادی)
 
 ```bash
-git clone git@github.com:qqsaeedpp/FreeFire-hub.git
-cd FreeFire-hub
+sudo git clone git@github.com:qqsaeedpp/FreeFire-hub.git /opt/freefire-hub
+sudo chown -R $USER:$USER /opt/freefire-hub
+cd /opt/freefire-hub
 cp .env.example .env
 nano .env          # مقادیر واقعی را وارد کنید (حداقل BOT_TOKEN)
 docker compose up -d --build
@@ -78,15 +79,20 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# 2) دریافت کد و تنظیم محیط
-git clone git@github.com:qqsaeedpp/FreeFire-hub.git
-cd FreeFire-hub
+# 2) دریافت کد در مسیر /opt و تنظیم محیط
+sudo git clone git@github.com:qqsaeedpp/FreeFire-hub.git /opt/freefire-hub
+sudo chown -R $USER:$USER /opt/freefire-hub
+cd /opt/freefire-hub
 cp .env.example .env && nano .env
 
 # 3) اجرا
 sudo docker compose up -d --build
 sudo docker compose logs -f bot
 ```
+
+> مسیر استقرار پروژه روی سرور: <code>/opt/freefire-hub</code>.
+> برای به‌روزرسانی بعدی کافی است در همین مسیر `git pull` بزنید و دوباره
+> `sudo docker compose up -d --build` را اجرا کنید.
 
 ربات با `restart: unless-stopped` پس از ری‌استارت سرور هم خودکار بالا می‌آید.
 
