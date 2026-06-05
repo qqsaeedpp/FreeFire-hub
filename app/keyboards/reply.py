@@ -16,6 +16,28 @@ BTN_SUPPORT = "🎧 پشتیبانی"
 BTN_ADMIN = "🛠 پنل مدیریت"
 
 
+BTN_MAIN = "🏠 منوی اصلی"
+BTN_CANCEL = "❌ لغو"
+
+# Every reply-keyboard button that must always reopen its own screen, even when
+# the user is in the middle of an FSM flow. Used by MenuResetMiddleware to drop
+# a stale state before routing so the press isn't swallowed by a state handler.
+MAIN_MENU_TEXTS: frozenset[str] = frozenset(
+    {
+        BTN_BUY_DIAMOND,
+        BTN_BUY_ACCOUNT,
+        BTN_SELL_ACCOUNT,
+        BTN_REQUEST_ACCOUNT,
+        BTN_WALLET,
+        BTN_REFERRAL,
+        BTN_MY_ORDERS,
+        BTN_SUPPORT,
+        BTN_ADMIN,
+        BTN_MAIN,
+    }
+)
+
+
 def main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardBuilder()
     kb.button(text=BTN_BUY_DIAMOND)

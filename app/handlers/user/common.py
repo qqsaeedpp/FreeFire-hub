@@ -13,7 +13,7 @@ from app.keyboards.callbacks import NavCB
 from app.keyboards.reply import main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
-from app.utils.helpers import format_toman
+from app.utils.helpers import edit_or_answer, format_toman
 
 router = Router(name="user_common")
 log = get_logger("user.common")
@@ -101,7 +101,7 @@ async def cancel_cb(
     callback: CallbackQuery, db_user: User, state: FSMContext
 ) -> None:
     await state.clear()
-    await callback.message.edit_text("عملیات لغو شد. ✅")
+    await edit_or_answer(callback.message, "عملیات لغو شد. ✅")
     await callback.message.answer(
         "🏠 منوی اصلی:",
         reply_markup=main_menu(_is_admin(db_user, callback.from_user.id)),

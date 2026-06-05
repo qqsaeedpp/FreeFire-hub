@@ -21,7 +21,7 @@ from app.models.user import User
 from app.services.account_service import AccountReservationError
 from app.services.notification_service import NotificationService
 from app.states.user_states import AccountPurchaseFlow
-from app.utils.helpers import format_toman, paginate_meta
+from app.utils.helpers import edit_or_answer, format_toman, paginate_meta
 
 router = Router(name="user_account")
 
@@ -65,7 +65,10 @@ async def change_page(
         page=callback_data.page, page_size=PAGE_SIZE
     )
     _, total_pages = paginate_meta(total, callback_data.page, PAGE_SIZE)
-    await callback.message.edit_text(
+    # edit_or_answer: the previous screen may be a photo (account detail), which
+    # can't be edited into a text list — fall back to a fresh message there.
+    await edit_or_answer(
+        callback.message,
         f"🛒 <b>لیست اکانت‌های موجود</b> ({total} اکانت):",
         reply_markup=accounts_list_menu(items, callback_data.page, total_pages),
     )
@@ -84,13 +87,14 @@ async def view_account(
     images = [i for i in images if i]
     kb = account_detail_menu(acc.id, callback_data.page)
     if images:
+        # Photos can't be edited in from a text list → new message (allowed).
         await callback.message.answer_photo(
             images[0], caption=_detail_text(acc), reply_markup=kb
         )
         for img in images[1:5]:
             await callback.message.answer_photo(img)
     else:
-        await callback.message.answer(_detail_text(acc), reply_markup=kb)
+        await edit_or_answer(callback.message, _detail_text(acc), reply_markup=kb)
     await callback.answer()
 
 
@@ -113,7 +117,8 @@ async def buy_account(
 
     await state.set_state(AccountPurchaseFlow.awaiting_receipt)
     await state.update_data(order_id=order.id, account_id=account.id)
-    await callback.message.answer(
+    await edit_or_answer(
+        callback.message,
         f"✅ اکانت #{account.id} برای شما رزرو شد.\n\n"
         f"💳 مبلغ <b>{format_toman(account.price)}</b> را به کارت زیر واریز کنید:\n"
         f"<code>{settings.card_number}</code>\nبه نام: <b>{settings.card_holder}</b>\n\n"

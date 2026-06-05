@@ -50,6 +50,7 @@ def diamond_plans_menu(plans: list[DiamondPlan]) -> InlineKeyboardMarkup:
             text=f"{plan.name} — {format_toman(plan.price)}",
             callback_data=DiamondCB(action="plan", value=plan.code),
         )
+    kb.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target="diamond_method"))
     kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
     kb.adjust(1)
     return kb.as_markup()

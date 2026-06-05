@@ -10,11 +10,12 @@ from app.container import Services
 from app.core.constants import OrderStatus, TransactionType
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
+from app.keyboards.inline import cancel_only
 from app.keyboards.reply import BTN_ADMIN
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import WalletAdjustFlow
-from app.utils.helpers import format_toman
+from app.utils.helpers import edit_or_answer, format_toman
 from app.utils.validators import parse_price
 
 router = Router(name="admin_panel")
@@ -87,8 +88,10 @@ async def approve_topup(
 @router.callback_query(AdminCB.filter(F.action == "wallet_adjust"), IsAdmin())
 async def wallet_adjust_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(WalletAdjustFlow.entering_user)
-    await callback.message.answer(
-        "👛 آیدی عددی تلگرام کاربر را وارد کنید:"
+    await edit_or_answer(
+        callback.message,
+        "👛 آیدی عددی تلگرام کاربر را وارد کنید:",
+        reply_markup=cancel_only(),
     )
     await callback.answer()
 

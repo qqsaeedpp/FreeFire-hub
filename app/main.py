@@ -14,6 +14,7 @@ from app.core.redis import close_redis, redis_client
 from app.handlers import register_routers
 from app.middlewares.ban import BanMiddleware
 from app.middlewares.database import DatabaseMiddleware
+from app.middlewares.menu_reset import MenuResetMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
 from app.scheduler.tasks import setup_scheduler
 from app.services.notification_service import NotificationService
@@ -30,6 +31,10 @@ def build_dispatcher() -> Dispatcher:
     dp.update.outer_middleware(ThrottlingMiddleware())
     dp.update.outer_middleware(DatabaseMiddleware())
     dp.update.outer_middleware(BanMiddleware())
+
+    # Drop a stale FSM state when a main-menu button is tapped, before the
+    # message is routed (otherwise a flow's state handler swallows the press).
+    dp.message.outer_middleware(MenuResetMiddleware())
 
     dp.include_router(errors_router)
     register_routers(dp)

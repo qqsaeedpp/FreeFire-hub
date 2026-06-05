@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from app.container import Services
 from app.core.config import settings
 from app.core.constants import LoginMethod
-from app.keyboards.callbacks import DiamondCB, LoginMethodCB
+from app.keyboards.callbacks import DiamondCB, LoginMethodCB, NavCB
 from app.keyboards.inline import (
     cancel_only,
     diamond_method_menu,
@@ -20,7 +20,7 @@ from app.keyboards.reply import BTN_BUY_DIAMOND, main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import DiamondAccountFlow, DiamondUIDFlow
-from app.utils.helpers import format_toman
+from app.utils.helpers import edit_or_answer, format_toman
 from app.utils.validators import is_valid_email, is_valid_uid
 
 router = Router(name="user_diamond")
@@ -60,6 +60,16 @@ async def choose_method(
     await callback.answer()
 
 
+@router.callback_query(NavCB.filter((F.action == "back") & (F.target == "diamond_method")))
+async def back_to_method(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.edit_text(
+        "💎 <b>خرید جم</b>\nروش خرید را انتخاب کنید:",
+        reply_markup=diamond_method_menu(),
+    )
+    await callback.answer()
+
+
 # ----------------------- UID flow -----------------------
 @router.callback_query(DiamondUIDFlow.choosing_plan, DiamondCB.filter(F.action == "plan"))
 async def uid_plan_chosen(
@@ -72,10 +82,10 @@ async def uid_plan_chosen(
     await state.update_data(plan_code=plan.code)
     await state.set_state(DiamondUIDFlow.entering_uid)
     await callback.message.edit_text(
-        f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید.\n"
-        f"پلن: {plan.name} — {format_toman(plan.price)}",
+        f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
+        f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
+        reply_markup=cancel_only(),
     )
-    await callback.message.answer("منتظر UID شما هستم:", reply_markup=cancel_only())
     await callback.answer()
 
 
@@ -118,9 +128,9 @@ async def acc_plan_chosen(
     await state.set_state(DiamondAccountFlow.entering_email)
     await callback.message.edit_text(
         f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
-        f"📧 ایمیل اکانت را ارسال کنید:"
+        f"📧 ایمیل اکانت را ارسال کنید:",
+        reply_markup=cancel_only(),
     )
-    await callback.message.answer("ایمیل:", reply_markup=cancel_only())
     await callback.answer()
 
 
@@ -176,8 +186,10 @@ async def acc_login_method(
     await services.commit()
     await state.update_data(order_id=order.id)
     await state.set_state(DiamondAccountFlow.awaiting_receipt)
-    await callback.message.edit_text("اطلاعات ثبت شد. ✅")
-    await callback.message.answer(_payment_text(plan.price), reply_markup=cancel_only())
+    await callback.message.edit_text(
+        "اطلاعات ثبت شد. ✅\n\n" + _payment_text(plan.price),
+        reply_markup=cancel_only(),
+    )
     await callback.answer()
 
 

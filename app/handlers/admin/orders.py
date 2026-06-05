@@ -156,10 +156,14 @@ async def reject_finish(
 
 
 async def _refresh(callback: CallbackQuery, order_id: int, completed: bool = False) -> None:
+    status = "🏁 تکمیل‌شده" if completed else "✅ تاییدشده"
+    msg = callback.message
+    body = msg.text if msg.text is not None else (msg.caption or f"سفارش #{order_id}")
+    new_text = f"{body}\n\n— وضعیت: {status}"
     try:
-        status = "🏁 تکمیل‌شده" if completed else "✅ تاییدشده"
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n— وضعیت: {status}", reply_markup=None
-        )
-    except Exception:  # noqa: BLE001 - message may be a photo caption
+        if msg.text is not None:
+            await msg.edit_text(new_text, reply_markup=None)
+        else:  # admin card is a photo → update its caption in place
+            await msg.edit_caption(caption=new_text, reply_markup=None)
+    except Exception:  # noqa: BLE001 - keyboard may already be gone / unchanged
         pass

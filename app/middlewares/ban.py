@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram import BaseMiddleware
-from aiogram.types import CallbackQuery, Message, TelegramObject
+from aiogram.types import CallbackQuery, Message, TelegramObject, Update
 
 from app.models.user import User
 
@@ -20,9 +20,10 @@ class BanMiddleware(BaseMiddleware):
         user: User | None = data.get("db_user")
         if user and user.is_banned:
             text = "⛔️ دسترسی شما به ربات مسدود شده است."
-            if isinstance(event, CallbackQuery):
-                await event.answer(text, show_alert=True)
-            elif isinstance(event, Message):
-                await event.answer(text)
+            inner = event.event if isinstance(event, Update) else event
+            if isinstance(inner, CallbackQuery):
+                await inner.answer(text, show_alert=True)
+            elif isinstance(inner, Message):
+                await inner.answer(text)
             return None
         return await handler(event, data)

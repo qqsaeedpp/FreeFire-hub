@@ -4,6 +4,31 @@ from __future__ import annotations
 import secrets
 import string
 
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import InlineKeyboardMarkup, Message
+
+
+async def edit_or_answer(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    """Edit the message in place (text or caption) instead of sending a new one.
+
+    Keeps callback-driven navigation to a single, mutating message. Falls back to
+    a fresh message only when the source can't be edited (e.g. media-only message
+    or the «message is not modified» no-op).
+    """
+    try:
+        if message.text is not None:
+            await message.edit_text(text, reply_markup=reply_markup)
+        elif message.caption is not None:
+            await message.edit_caption(caption=text, reply_markup=reply_markup)
+        else:
+            await message.answer(text, reply_markup=reply_markup)
+    except TelegramBadRequest:
+        await message.answer(text, reply_markup=reply_markup)
+
 
 def generate_referral_code(length: int = 8) -> str:
     alphabet = string.ascii_uppercase + string.digits

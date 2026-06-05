@@ -11,7 +11,7 @@ from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import cancel_only
 from app.states.admin_states import AddAccountFlow, EditDiamondPrice
-from app.utils.helpers import format_toman
+from app.utils.helpers import edit_or_answer, format_toman
 from app.utils.validators import parse_price
 
 router = Router(name="admin_accounts")
@@ -21,7 +21,9 @@ router = Router(name="admin_accounts")
 @router.callback_query(AdminCB.filter(F.action == "add_account"), IsAdmin())
 async def add_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(AddAccountFlow.title)
-    await callback.message.answer("➕ عنوان اکانت را وارد کنید:", reply_markup=cancel_only())
+    await edit_or_answer(
+        callback.message, "➕ عنوان اکانت را وارد کنید:", reply_markup=cancel_only()
+    )
     await callback.answer()
 
 
@@ -135,8 +137,10 @@ async def diamond_prices(callback: CallbackQuery, services: Services) -> None:
             callback_data=AdminCB(action="edit_plan", value=p.code),
         )
     kb.adjust(1)
-    await callback.message.answer(
-        "💎 برای تغییر قیمت، پلن موردنظر را انتخاب کنید:", reply_markup=kb.as_markup()
+    await edit_or_answer(
+        callback.message,
+        "💎 برای تغییر قیمت، پلن موردنظر را انتخاب کنید:",
+        reply_markup=kb.as_markup(),
     )
     await callback.answer()
 
@@ -147,7 +151,8 @@ async def edit_plan(
 ) -> None:
     await state.set_state(EditDiamondPrice.entering_price)
     await state.update_data(plan_code=callback_data.value)
-    await callback.message.answer(
+    await edit_or_answer(
+        callback.message,
         f"قیمت جدید برای پلن <code>{callback_data.value}</code> را وارد کنید (تومان):",
         reply_markup=cancel_only(),
     )

@@ -14,6 +14,7 @@ from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import cancel_only
 from app.states.admin_states import BroadcastFlow
+from app.utils.helpers import edit_or_answer
 
 router = Router(name="admin_broadcast")
 log = get_logger("admin.broadcast")
@@ -22,8 +23,10 @@ log = get_logger("admin.broadcast")
 @router.callback_query(AdminCB.filter(F.action == "broadcast"), IsAdmin())
 async def broadcast_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(BroadcastFlow.entering_message)
-    await callback.message.answer(
-        "📣 پیام همگانی را ارسال کنید (متن دلخواه):", reply_markup=cancel_only()
+    await edit_or_answer(
+        callback.message,
+        "📣 پیام همگانی را ارسال کنید (متن دلخواه):",
+        reply_markup=cancel_only(),
     )
     await callback.answer()
 
