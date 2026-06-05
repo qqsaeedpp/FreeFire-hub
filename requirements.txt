@@ -1,0 +1,31 @@
+# --- Telegram Bot ---
+aiogram==3.13.1
+
+# --- Database (MySQL 8 / async) ---
+SQLAlchemy[asyncio]==2.0.36
+asyncmy==0.2.10            # high-performance async MySQL driver for SQLAlchemy
+alembic==1.14.0
+cryptography==43.0.3      # required by asyncmy for caching_sha2_password
+
+# --- Settings / Validation ---
+pydantic==2.9.2
+pydantic-settings==2.6.1
+
+# --- Cache / Broker ---
+redis==5.2.0
+
+# --- Background jobs ---
+APScheduler==3.10.4
+
+# --- Logging ---
+structlog==24.4.0
+
+# --- Utils ---
+python-dotenv==1.0.1
+Pillow==11.0.0
+tenacity==9.0.0           # retry mechanism
+
+# --- Tests ---
+pytest==8.3.3
+pytest-asyncio==0.24.0
+aiosqlite==0.20.0         # in-memory db for unit tests
