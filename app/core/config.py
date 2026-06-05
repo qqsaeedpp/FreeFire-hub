@@ -17,8 +17,18 @@ class Settings(BaseSettings):
 
     # --- Telegram ---
     bot_token: str = Field(..., alias="BOT_TOKEN")
-    admin_id: int = Field(..., alias="ADMIN_ID")
+    # One id, or several comma-separated ids ("123" or "123,456").
+    admin_id_raw: str = Field(..., alias="ADMIN_ID")
     log_chat_id: int = Field(..., alias="LOG_CHAT_ID")
+
+    @cached_property
+    def admin_ids(self) -> list[int]:
+        return [int(p.strip()) for p in self.admin_id_raw.split(",") if p.strip()]
+
+    @property
+    def admin_id(self) -> int:
+        """Primary admin (first configured id) — recipient for admin notifications."""
+        return self.admin_ids[0]
 
     # --- MySQL ---
     mysql_host: str = Field("localhost", alias="MYSQL_HOST")

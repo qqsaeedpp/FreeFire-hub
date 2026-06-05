@@ -27,7 +27,7 @@ WELCOME = (
 
 
 def _is_admin(user: User | None, tg_id: int) -> bool:
-    return tg_id == settings.admin_id or bool(user and user.is_admin)
+    return tg_id in settings.admin_ids or bool(user and user.is_admin)
 
 
 @router.message(CommandStart(deep_link=True))

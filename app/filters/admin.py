@@ -13,6 +13,6 @@ class IsAdmin(BaseFilter):
         self, event: Message | CallbackQuery, db_user: User | None = None
     ) -> bool:
         uid = event.from_user.id if event.from_user else None
-        if uid == settings.admin_id:
+        if uid in settings.admin_ids:
             return True
         return bool(db_user and db_user.is_admin)
