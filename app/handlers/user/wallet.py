@@ -21,7 +21,7 @@ from app.services.button_service import BTN_KEY_WALLET
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import WalletFlow
-from app.utils.helpers import format_toman, is_admin_user, user_ref
+from app.utils.helpers import format_toman, is_admin_user, safe_answer, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="user_wallet")
@@ -91,7 +91,8 @@ async def topup_receipt(
         PaymentMethod(data["pay_method"]) if data.get("pay_method") else None, "-"
     )
     file_id = message.photo[-1].file_id
-    await message.answer(
+    await safe_answer(
+        message,
         "✅ رسید شارژ کیف پول دریافت شد و پس از تایید پشتیبانی به موجودی شما اضافه می‌شود.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )

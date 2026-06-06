@@ -13,7 +13,7 @@ from app.keyboards.callbacks import NavCB
 from app.keyboards.reply import build_main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
-from app.utils.helpers import edit_or_answer, format_toman, user_ref
+from app.utils.helpers import edit_or_answer, format_toman, safe_answer, user_ref
 
 router = Router(name="user_common")
 log = get_logger("user.common")
@@ -28,11 +28,11 @@ async def _send_welcome(message: Message, services: Services, is_admin: bool) ->
     text, entities = await services.text.render("welcome")
     markup = await build_main_menu(services, is_admin)
     if entities:
-        await message.answer(
-            text, entities=entities, parse_mode=None, reply_markup=markup
+        await safe_answer(
+            message, text, reply_markup=markup, entities=entities, parse_mode=None
         )
     else:
-        await message.answer(text, reply_markup=markup)
+        await safe_answer(message, text, reply_markup=markup)
 
 
 @router.message(CommandStart(deep_link=True))
@@ -102,7 +102,8 @@ async def show_menu(
     message: Message, services: Services, db_user: User, state: FSMContext
 ) -> None:
     await state.clear()
-    await message.answer(
+    await safe_answer(
+        message,
         "🏠 منوی اصلی:",
         reply_markup=await build_main_menu(
             services, _is_admin(db_user, message.from_user.id)
@@ -131,7 +132,8 @@ async def cancel_text(
 ) -> None:
     await _cancel_draft_order(services, state)
     await state.clear()
-    await message.answer(
+    await safe_answer(
+        message,
         "عملیات لغو شد. ✅",
         reply_markup=await build_main_menu(
             services, _is_admin(db_user, message.from_user.id)
@@ -146,7 +148,8 @@ async def cancel_cb(
     await _cancel_draft_order(services, state)
     await state.clear()
     await edit_or_answer(callback.message, "عملیات لغو شد. ✅")
-    await callback.message.answer(
+    await safe_answer(
+        callback.message,
         "🏠 منوی اصلی:",
         reply_markup=await build_main_menu(
             services, _is_admin(db_user, callback.from_user.id)

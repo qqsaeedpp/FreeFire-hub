@@ -24,7 +24,7 @@ from app.models.user import User
 from app.handlers.user.discount import prompt_discount
 from app.services.notification_service import NotificationService
 from app.states.user_states import DiamondAccountFlow, DiamondFlow, DiamondUIDFlow
-from app.utils.helpers import format_toman, is_admin_user, user_ref
+from app.utils.helpers import format_toman, is_admin_user, safe_answer, user_ref
 from app.utils.validators import is_valid_email, is_valid_uid
 
 router = Router(name="user_diamond")
@@ -238,7 +238,8 @@ async def _finalize_receipt(
     await services.order.attach_receipt(order, file_id)
     await services.commit()
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ رسید شما دریافت شد.\nشماره سفارش: <b>#{order.id}</b>\n"
         f"سفارش شما در حال بررسی توسط پشتیبانی است و به‌زودی نتیجه اعلام می‌شود.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),

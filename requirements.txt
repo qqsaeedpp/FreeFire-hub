@@ -1,5 +1,7 @@
 # --- Telegram Bot ---
-aiogram==3.13.1
+# 3.28+ adds native ``style`` & ``icon_custom_emoji_id`` on Keyboard/InlineKeyboard
+# buttons (Bot API 9.4+) plus ``Bot.get_custom_emoji_stickers`` for validation.
+aiogram==3.28.2
 
 # --- Database (MySQL 8 / async) ---
 SQLAlchemy[asyncio]==2.0.36

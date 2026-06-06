@@ -7,8 +7,59 @@ from collections.abc import Sequence
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import InlineKeyboardMarkup, Message, MessageEntity
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    Message,
+    MessageEntity,
+    ReplyKeyboardMarkup,
+)
 from aiogram.utils.media_group import MediaGroupBuilder
+
+
+def strip_custom_emoji(markup):
+    """Return a copy of a keyboard markup with every button's premium emoji removed.
+
+    ``icon_custom_emoji_id`` only renders when the bot is allowed to use custom
+    emoji (owner has Telegram Premium / Fragment username). If it isn't, Telegram
+    may reject the whole keyboard — this produces a safe fallback that keeps the
+    button text/color but drops the premium icon, so the menu always shows.
+    Works for both reply and inline keyboards; other markup types pass through.
+    """
+    if isinstance(markup, InlineKeyboardMarkup):
+        rows = [
+            [btn.model_copy(update={"icon_custom_emoji_id": None}) for btn in row]
+            for row in markup.inline_keyboard
+        ]
+        return markup.model_copy(update={"inline_keyboard": rows})
+    if isinstance(markup, ReplyKeyboardMarkup):
+        rows = [
+            [btn.model_copy(update={"icon_custom_emoji_id": None}) for btn in row]
+            for row in markup.keyboard
+        ]
+        return markup.model_copy(update={"keyboard": rows})
+    return markup
+
+
+async def safe_answer(
+    message: Message,
+    text: str,
+    reply_markup=None,
+    **kwargs,
+):
+    """``message.answer`` that never crashes on an unavailable premium emoji.
+
+    On :class:`TelegramBadRequest` it retries once with the premium emoji stripped
+    from the keyboard (see :func:`strip_custom_emoji`), guaranteeing the menu is
+    delivered even if the bot can't render the custom emoji.
+    """
+    try:
+        return await message.answer(text, reply_markup=reply_markup, **kwargs)
+    except TelegramBadRequest:
+        if reply_markup is None:
+            raise
+        return await message.answer(
+            text, reply_markup=strip_custom_emoji(reply_markup), **kwargs
+        )
 
 
 async def edit_or_answer(

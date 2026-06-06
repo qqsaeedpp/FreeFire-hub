@@ -18,7 +18,7 @@ from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import AdminReplyFlow
 from app.states.user_states import TicketFlow
-from app.utils.helpers import is_admin_user, user_ref
+from app.utils.helpers import is_admin_user, safe_answer, user_ref
 
 router = Router(name="support_tickets")
 
@@ -66,7 +66,8 @@ async def ticket_message(
         db_user.id, data["subject"], text=text, file_id=file_id, file_type=file_type
     )
     await services.commit()
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ تیکت شما با شماره #{ticket.id} ثبت شد. پشتیبانی به‌زودی پاسخ می‌دهد.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )

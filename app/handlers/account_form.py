@@ -31,6 +31,7 @@ from app.utils.helpers import (
     format_toman,
     is_admin_user,
     parse_images,
+    safe_answer,
     send_album,
     user_ref,
 )
@@ -200,7 +201,8 @@ async def step_special_items(
         await message.answer(f"✅ اکانت #{account.id} ثبت و در فروشگاه منتشر شد.")
         return
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ اکانت شما با شماره #{account.id} ثبت شد و برای بررسی به پشتیبانی ارسال شد.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )

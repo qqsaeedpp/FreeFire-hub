@@ -30,6 +30,7 @@ from app.utils.helpers import (
     is_admin_user,
     paginate_meta,
     parse_images,
+    safe_answer,
     send_album,
     user_ref,
 )
@@ -160,7 +161,8 @@ async def account_receipt(
     await services.order.attach_receipt(order, file_id)
     await services.commit()
 
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ رسید دریافت شد. سفارش #{order.id} در حال بررسی است.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )

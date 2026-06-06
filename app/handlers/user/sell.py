@@ -17,7 +17,13 @@ from app.keyboards.reply import build_main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import RequestedAccountFlow
-from app.utils.helpers import edit_or_answer, format_toman, is_admin_user, user_ref
+from app.utils.helpers import (
+    edit_or_answer,
+    format_toman,
+    is_admin_user,
+    safe_answer,
+    user_ref,
+)
 from app.utils.validators import parse_price
 
 router = Router(name="user_sell")
@@ -101,7 +107,8 @@ async def req_deposit(
         deposit_receipt_file_id=file_id,
     )
     await services.commit()
-    await message.answer(
+    await safe_answer(
+        message,
         f"✅ درخواست اکانت شما با شماره #{req.id} ثبت شد و در حال بررسی است.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
