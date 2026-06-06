@@ -58,18 +58,22 @@ class DiscountCB(CallbackData, prefix="disc"):
 
 class BotTextCB(CallbackData, prefix="btxt"):
     action: str  # view | edit | reset | list
-    key: str = ""
+    # Nullable so an empty trailing segment (e.g. action="list") unpacks cleanly;
+    # aiogram converts an empty last field to None, which a bare ``str`` rejects.
+    key: str | None = None
 
 
 class TutorialCB(CallbackData, prefix="tut"):
     action: str  # view | edit | clear | list (admin) | watch (user)
-    key: str = ""
+    key: str | None = None
 
 
 class ButtonCB(CallbackData, prefix="btn"):
     action: str  # view | edit_text | edit_emoji | color | set_color | toggle | premium | clear_premium | reset | list
-    key: str = ""
-    value: str = ""  # color token (primary|success|danger|none) for set_color
+    # Nullable trailing fields: aiogram unpacks an empty trailing segment as None,
+    # which a bare ``str`` would reject (breaking every callback with empty value).
+    key: str | None = None
+    value: str | None = None  # color token (primary|success|danger|none) for set_color
 
 
 class AdminCardCB(CallbackData, prefix="acard"):
