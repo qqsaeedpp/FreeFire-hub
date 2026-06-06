@@ -15,7 +15,7 @@ from aiogram import BaseMiddleware
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, TelegramObject
 
-from app.keyboards.reply import MAIN_MENU_TEXTS
+from app.keyboards.reply import BTN_MAIN, MAIN_MENU_TEXTS
 
 
 class MenuResetMiddleware(BaseMiddleware):
@@ -25,8 +25,15 @@ class MenuResetMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        if isinstance(event, Message) and event.text in MAIN_MENU_TEXTS:
-            state: FSMContext | None = data.get("state")
-            if state is not None and await state.get_state() is not None:
-                await state.clear()
+        if isinstance(event, Message) and event.text:
+            services = data.get("services")
+            if services is not None:
+                labels = await services.button.all_labels()
+                menu_texts = set(labels.values()) | {BTN_MAIN}
+            else:
+                menu_texts = MAIN_MENU_TEXTS
+            if event.text in menu_texts:
+                state: FSMContext | None = data.get("state")
+                if state is not None and await state.get_state() is not None:
+                    await state.clear()
         return await handler(event, data)

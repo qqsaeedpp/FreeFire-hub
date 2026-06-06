@@ -14,8 +14,11 @@ from app.keyboards.inline import (
     account_detail_menu,
     accounts_list_menu,
     admin_order_review,
+    buy_account_menu,
 )
-from app.keyboards.reply import BTN_BUY_ACCOUNT, main_menu
+from app.keyboards.reply import build_main_menu
+from app.filters.buttons import MainBtn
+from app.services.button_service import BTN_KEY_BUY_ACCOUNT
 from app.models.account import Account
 from app.models.user import User
 from app.services.account_service import AccountReservationError
@@ -47,22 +50,32 @@ def _detail_text(acc: Account) -> str:
     )
 
 
-async def _send_list(target: Message, services: Services, page: int) -> None:
-    items, total = await services.account.list_available(page=page, page_size=PAGE_SIZE)
-    _, total_pages = paginate_meta(total, page, PAGE_SIZE)
-    if total == 0:
-        await target.answer("فعلاً اکانتی برای فروش موجود نیست. 🙏")
-        return
-    await target.answer(
-        f"🛒 <b>لیست اکانت‌های موجود</b> ({total} اکانت)\nیکی را برای مشاهده جزئیات انتخاب کنید:",
-        reply_markup=accounts_list_menu(items, page, total_pages),
+@router.message(MainBtn(BTN_KEY_BUY_ACCOUNT))
+async def entry(message: Message, state: FSMContext) -> None:
+    # Buy-account is now a submenu: ready-made shop list vs. a requested account.
+    await state.clear()
+    await message.answer(
+        "🛒 <b>خرید اکانت</b>\nیکی از گزینه‌ها را انتخاب کنید:",
+        reply_markup=buy_account_menu(),
     )
 
 
-@router.message(F.text == BTN_BUY_ACCOUNT)
-async def entry(message: Message, services: Services, state: FSMContext) -> None:
+@router.callback_query(AccountCB.filter(F.action == "ready"))
+async def ready_list(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    items, total = await services.account.list_available(page=1, page_size=PAGE_SIZE)
+    if total == 0:
+        await callback.answer("فعلاً اکانتی برای فروش موجود نیست. 🙏", show_alert=True)
+        return
     await state.set_state(AccountPurchaseFlow.browsing)
-    await _send_list(message, services, page=1)
+    _, total_pages = paginate_meta(total, 1, PAGE_SIZE)
+    await edit_or_answer(
+        callback.message,
+        f"🛒 <b>لیست اکانت‌های موجود</b> ({total} اکانت)\nیکی را برای مشاهده جزئیات انتخاب کنید:",
+        reply_markup=accounts_list_menu(items, 1, total_pages),
+    )
+    await callback.answer()
 
 
 @router.callback_query(AccountCB.filter(F.action == "page"))
@@ -149,7 +162,7 @@ async def account_receipt(
 
     await message.answer(
         f"✅ رسید دریافت شد. سفارش #{order.id} در حال بررسی است.",
-        reply_markup=main_menu(is_admin_user(message, db_user)),
+        reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")

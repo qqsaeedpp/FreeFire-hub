@@ -6,6 +6,7 @@ from aiogram import Dispatcher
 from app.handlers import account_form
 from app.handlers.admin import accounts as admin_accounts
 from app.handlers.admin import broadcast as admin_broadcast
+from app.handlers.admin import buttons as admin_buttons
 from app.handlers.admin import cards as admin_cards
 from app.handlers.admin import discounts as admin_discounts
 from app.handlers.admin import lottery as admin_lottery
@@ -40,6 +41,7 @@ def register_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_broadcast.router)
     dp.include_router(admin_texts.router)
     dp.include_router(admin_tutorials.router)
+    dp.include_router(admin_buttons.router)
 
     dp.include_router(support_tickets.router)
 

@@ -20,7 +20,9 @@ from app.core.constants import AccountStatus
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import admin_sale_review, cancel_only
-from app.keyboards.reply import BTN_SELL_ACCOUNT, main_menu
+from app.keyboards.reply import build_main_menu
+from app.filters.buttons import MainBtn
+from app.services.button_service import BTN_KEY_SELL_ACCOUNT
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import AccountFormFlow
@@ -56,7 +58,7 @@ async def admin_entry(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(F.text == BTN_SELL_ACCOUNT)
+@router.message(MainBtn(BTN_KEY_SELL_ACCOUNT))
 async def user_entry(message: Message, state: FSMContext) -> None:
     await state.set_state(AccountFormFlow.title)
     await state.update_data(mode="user")
@@ -200,7 +202,7 @@ async def step_special_items(
 
     await message.answer(
         f"✅ اکانت شما با شماره #{account.id} ثبت شد و برای بررسی به پشتیبانی ارسال شد.",
-        reply_markup=main_menu(is_admin_user(message, db_user)),
+        reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
     await _notify_admin_new_listing(bot, account, db_user)
 

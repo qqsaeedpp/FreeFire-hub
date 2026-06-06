@@ -10,7 +10,7 @@ from app.container import Services
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.keyboards.callbacks import NavCB
-from app.keyboards.reply import main_menu
+from app.keyboards.reply import build_main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.utils.helpers import edit_or_answer, format_toman, user_ref
@@ -26,7 +26,7 @@ def _is_admin(user: User | None, tg_id: int) -> bool:
 async def _send_welcome(message: Message, services: Services, is_admin: bool) -> None:
     """Send the (admin-editable) welcome text with premium emoji preserved."""
     text, entities = await services.text.render("welcome")
-    markup = main_menu(is_admin)
+    markup = await build_main_menu(services, is_admin)
     if entities:
         await message.answer(
             text, entities=entities, parse_mode=None, reply_markup=markup
@@ -98,11 +98,15 @@ async def start(
 
 @router.message(Command("menu"))
 @router.message(F.text == "🏠 منوی اصلی")
-async def show_menu(message: Message, db_user: User, state: FSMContext) -> None:
+async def show_menu(
+    message: Message, services: Services, db_user: User, state: FSMContext
+) -> None:
     await state.clear()
     await message.answer(
         "🏠 منوی اصلی:",
-        reply_markup=main_menu(_is_admin(db_user, message.from_user.id)),
+        reply_markup=await build_main_menu(
+            services, _is_admin(db_user, message.from_user.id)
+        ),
     )
 
 
@@ -129,7 +133,9 @@ async def cancel_text(
     await state.clear()
     await message.answer(
         "عملیات لغو شد. ✅",
-        reply_markup=main_menu(_is_admin(db_user, message.from_user.id)),
+        reply_markup=await build_main_menu(
+            services, _is_admin(db_user, message.from_user.id)
+        ),
     )
 
 
@@ -142,7 +148,9 @@ async def cancel_cb(
     await edit_or_answer(callback.message, "عملیات لغو شد. ✅")
     await callback.message.answer(
         "🏠 منوی اصلی:",
-        reply_markup=main_menu(_is_admin(db_user, callback.from_user.id)),
+        reply_markup=await build_main_menu(
+            services, _is_admin(db_user, callback.from_user.id)
+        ),
     )
     await callback.answer()
 

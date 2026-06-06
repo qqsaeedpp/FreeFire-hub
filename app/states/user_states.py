@@ -4,6 +4,13 @@ from __future__ import annotations
 from aiogram.fsm.state import State, StatesGroup
 
 
+class DiamondFlow(StatesGroup):
+    """Shared first steps of the diamond purchase: pick the amount, then the method."""
+
+    choosing_amount = State()
+    choosing_method = State()
+
+
 class DiamondUIDFlow(StatesGroup):
     choosing_plan = State()
     entering_uid = State()

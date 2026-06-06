@@ -15,7 +15,9 @@ from app.core.constants import (
 )
 from app.handlers.user.payment import prompt_payment_method
 from app.keyboards.inline import cancel_only
-from app.keyboards.reply import BTN_WALLET, main_menu
+from app.keyboards.reply import build_main_menu
+from app.filters.buttons import MainBtn
+from app.services.button_service import BTN_KEY_WALLET
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import WalletFlow
@@ -33,7 +35,7 @@ _TX_FA = {
 }
 
 
-@router.message(F.text == BTN_WALLET)
+@router.message(MainBtn(BTN_KEY_WALLET))
 async def wallet_home(message: Message, services: Services, db_user: User) -> None:
     wallet = await services.wallet.get_or_create(db_user.id)
     txs = await services.wallet.history(db_user.id, limit=10)
@@ -91,7 +93,7 @@ async def topup_receipt(
     file_id = message.photo[-1].file_id
     await message.answer(
         "✅ رسید شارژ کیف پول دریافت شد و پس از تایید پشتیبانی به موجودی شما اضافه می‌شود.",
-        reply_markup=main_menu(is_admin_user(message, db_user)),
+        reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     from aiogram.utils.keyboard import InlineKeyboardBuilder

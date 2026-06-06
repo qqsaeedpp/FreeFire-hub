@@ -13,61 +13,40 @@ from app.keyboards.callbacks import DiamondCB, NavCB, TutorialCB
 from app.keyboards.inline import (
     backup_code_menu,
     cancel_only,
+    diamond_amount_menu,
     diamond_method_menu,
-    diamond_plans_menu,
 )
 from app.services.tutorial_service import GOOGLE_BACKUP_CODE_VIDEO
-from app.keyboards.reply import BTN_BUY_DIAMOND, main_menu
+from app.keyboards.reply import build_main_menu
+from app.filters.buttons import MainBtn
+from app.services.button_service import BTN_KEY_BUY_DIAMOND
 from app.models.user import User
 from app.handlers.user.discount import prompt_discount
 from app.services.notification_service import NotificationService
-from app.states.user_states import DiamondAccountFlow, DiamondUIDFlow
+from app.states.user_states import DiamondAccountFlow, DiamondFlow, DiamondUIDFlow
 from app.utils.helpers import format_toman, is_admin_user, user_ref
 from app.utils.validators import is_valid_email, is_valid_uid
 
 router = Router(name="user_diamond")
 
 
-@router.message(F.text == BTN_BUY_DIAMOND)
+@router.message(MainBtn(BTN_KEY_BUY_DIAMOND))
 async def entry(message: Message, services: Services, state: FSMContext) -> None:
-    await state.clear()
+    # New flow: pick the diamond amount first, then the purchase method.
+    await state.set_state(DiamondFlow.choosing_amount)
+    plans = await services.diamond.list_plans()
     text, entities = await services.text.render("diamond_guide")
     if entities:
         await message.answer(
-            text, entities=entities, parse_mode=None, reply_markup=diamond_method_menu()
+            text, entities=entities, parse_mode=None,
+            reply_markup=diamond_amount_menu(plans),
         )
     else:
-        await message.answer(text, reply_markup=diamond_method_menu())
+        await message.answer(text, reply_markup=diamond_amount_menu(plans))
 
 
-@router.callback_query(DiamondCB.filter(F.action == "method"))
-async def choose_method(
-    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
-) -> None:
-    plans = await services.diamond.list_plans()
-    if callback_data.value == "uid":
-        await state.set_state(DiamondUIDFlow.choosing_plan)
-    else:
-        await state.set_state(DiamondAccountFlow.choosing_plan)
-    await callback.message.edit_text(
-        "📦 پلن مورد نظر را انتخاب کنید:", reply_markup=diamond_plans_menu(plans)
-    )
-    await callback.answer()
-
-
-@router.callback_query(NavCB.filter((F.action == "back") & (F.target == "diamond_method")))
-async def back_to_method(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.clear()
-    await callback.message.edit_text(
-        "💎 <b>خرید جم</b>\nروش خرید را انتخاب کنید:",
-        reply_markup=diamond_method_menu(),
-    )
-    await callback.answer()
-
-
-# ----------------------- UID flow -----------------------
-@router.callback_query(DiamondUIDFlow.choosing_plan, DiamondCB.filter(F.action == "plan"))
-async def uid_plan_chosen(
+@router.callback_query(DiamondFlow.choosing_amount, DiamondCB.filter(F.action == "plan"))
+async def amount_chosen(
     callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
 ) -> None:
     plan = await services.diamond.get_plan(callback_data.value)
@@ -75,15 +54,55 @@ async def uid_plan_chosen(
         await callback.answer("پلن یافت نشد.", show_alert=True)
         return
     await state.update_data(plan_code=plan.code)
-    await state.set_state(DiamondUIDFlow.entering_uid)
+    await state.set_state(DiamondFlow.choosing_method)
     await callback.message.edit_text(
-        f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
-        f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
-        reply_markup=cancel_only(),
+        f"💎 پلن انتخابی: <b>{plan.name}</b> — {format_toman(plan.price)}\n\n"
+        f"روش خرید را انتخاب کنید:",
+        reply_markup=diamond_method_menu(),
     )
     await callback.answer()
 
 
+@router.callback_query(DiamondFlow.choosing_method, DiamondCB.filter(F.action == "method"))
+async def method_chosen(
+    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
+) -> None:
+    data = await state.get_data()
+    plan = await services.diamond.get_plan(data.get("plan_code"))
+    if not plan:
+        await callback.answer("ابتدا مقدار جم را انتخاب کنید.", show_alert=True)
+        return
+    if callback_data.value == "uid":
+        await state.set_state(DiamondUIDFlow.entering_uid)
+        await callback.message.edit_text(
+            f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
+            f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
+            reply_markup=cancel_only(),
+        )
+    else:
+        await state.set_state(DiamondAccountFlow.entering_email)
+        await callback.message.edit_text(
+            f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
+            f"📧 ایمیل اکانت را ارسال کنید:",
+            reply_markup=cancel_only(),
+        )
+    await callback.answer()
+
+
+@router.callback_query(NavCB.filter((F.action == "back") & (F.target == "diamond_amount")))
+async def back_to_amount(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    await state.set_state(DiamondFlow.choosing_amount)
+    plans = await services.diamond.list_plans()
+    await callback.message.edit_text(
+        "💎 <b>خرید جم</b>\nمقدار جم مورد نظر را انتخاب کنید:",
+        reply_markup=diamond_amount_menu(plans),
+    )
+    await callback.answer()
+
+
+# ----------------------- UID flow -----------------------
 @router.message(DiamondUIDFlow.entering_uid, F.text)
 async def uid_received(
     message: Message, services: Services, state: FSMContext, db_user: User
@@ -114,26 +133,6 @@ async def uid_receipt(
 
 
 # ----------------------- Account-credentials flow -----------------------
-@router.callback_query(
-    DiamondAccountFlow.choosing_plan, DiamondCB.filter(F.action == "plan")
-)
-async def acc_plan_chosen(
-    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
-) -> None:
-    plan = await services.diamond.get_plan(callback_data.value)
-    if not plan:
-        await callback.answer("پلن یافت نشد.", show_alert=True)
-        return
-    await state.update_data(plan_code=plan.code)
-    await state.set_state(DiamondAccountFlow.entering_email)
-    await callback.message.edit_text(
-        f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
-        f"📧 ایمیل اکانت را ارسال کنید:",
-        reply_markup=cancel_only(),
-    )
-    await callback.answer()
-
-
 @router.message(DiamondAccountFlow.entering_email, F.text)
 async def acc_email(message: Message, state: FSMContext) -> None:
     email = message.text.strip()
@@ -242,7 +241,7 @@ async def _finalize_receipt(
     await message.answer(
         f"✅ رسید شما دریافت شد.\nشماره سفارش: <b>#{order.id}</b>\n"
         f"سفارش شما در حال بررسی توسط پشتیبانی است و به‌زودی نتیجه اعلام می‌شود.",
-        reply_markup=main_menu(is_admin_user(message, db_user)),
+        reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
 
     notifier = NotificationService(bot)

@@ -69,3 +69,10 @@ class TutorialMediaFlow(StatesGroup):
     """Capture a replacement video for an admin-managed tutorial."""
 
     awaiting_video = State()
+
+
+class ButtonEditFlow(StatesGroup):
+    """Capture a new text or emoji for an admin-editable main button."""
+
+    entering_text = State()
+    entering_emoji = State()

@@ -2,6 +2,7 @@
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
 from app.models.admin_log import AdminLog
 from app.models.bot_text import BotText
+from app.models.button_settings import ButtonSettings
 from app.models.discount import DiscountCode
 from app.models.order import AccountOrder, DiamondOrder, Order
 from app.models.payment import Payment
@@ -29,6 +30,7 @@ __all__ = [
     "PaymentCard",
     "DiscountCode",
     "BotText",
+    "ButtonSettings",
     "TutorialMedia",
     "AdminLog",
 ]

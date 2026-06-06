@@ -11,7 +11,8 @@ from app.core.constants import OrderStatus, TransactionType
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import cancel_only
-from app.keyboards.reply import BTN_ADMIN
+from app.filters.buttons import MainBtn
+from app.services.button_service import BTN_KEY_ADMIN
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import WalletAdjustFlow
@@ -36,11 +37,12 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
     kb.button(text="📝 مدیریت متن‌های ربات", callback_data=AdminCB(action="texts"))
     kb.button(text="🎥 مدیریت ویدیوهای آموزشی", callback_data=AdminCB(action="tutorials"))
-    kb.adjust(2, 2, 2, 2, 2, 2, 1)
+    kb.button(text="🎨 مدیریت دکمه‌ها", callback_data=AdminCB(action="buttons"))
+    kb.adjust(2, 2, 2, 2, 2, 2, 2, 1)
     return kb.as_markup()
 
 
-@router.message(F.text == BTN_ADMIN, IsAdmin())
+@router.message(MainBtn(BTN_KEY_ADMIN), IsAdmin())
 @router.message(F.text == "/admin", IsAdmin())
 async def admin_home(message: Message, state: FSMContext) -> None:
     await state.clear()

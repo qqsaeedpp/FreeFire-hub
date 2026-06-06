@@ -1,19 +1,20 @@
 """Referral handlers — show code, link and stats."""
 from __future__ import annotations
 
-from aiogram import F, Router
+from aiogram import Router
 from aiogram.types import Message
 
 from app.container import Services
 from app.core.config import settings
-from app.keyboards.reply import BTN_REFERRAL
+from app.filters.buttons import MainBtn
+from app.services.button_service import BTN_KEY_REFERRAL
 from app.models.user import User
 from app.utils.helpers import format_toman
 
 router = Router(name="user_referral")
 
 
-@router.message(F.text == BTN_REFERRAL)
+@router.message(MainBtn(BTN_KEY_REFERRAL))
 async def referral_home(
     message: Message, services: Services, db_user: User, bot
 ) -> None:

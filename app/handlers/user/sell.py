@@ -7,16 +7,17 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
 from app.core.config import settings
+from app.keyboards.callbacks import AccountCB
 from app.keyboards.inline import cancel_only, requested_deposit_review
-from app.keyboards.reply import BTN_REQUEST_ACCOUNT, main_menu
+from app.keyboards.reply import build_main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import RequestedAccountFlow
-from app.utils.helpers import format_toman, is_admin_user, user_ref
+from app.utils.helpers import edit_or_answer, format_toman, is_admin_user, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="user_sell")
@@ -25,16 +26,18 @@ router = Router(name="user_sell")
 # ========================= REQUESTED ACCOUNT =========================
 
 
-@router.message(F.text == BTN_REQUEST_ACCOUNT)
-async def req_entry(message: Message, state: FSMContext) -> None:
+@router.callback_query(AccountCB.filter(F.action == "requested"))
+async def req_entry(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(RequestedAccountFlow.entering_price)
-    await message.answer(
+    await edit_or_answer(
+        callback.message,
         "📝 <b>ثبت اکانت درخواستی</b>\n"
         f"توجه: برای ثبت سفارش، بیعانه‌ای معادل "
         f"<b>{format_toman(settings.requested_account_deposit)}</b> دریافت می‌شود.\n\n"
         "قیمت مدنظر خود را (به تومان) وارد کنید:",
         reply_markup=cancel_only(),
     )
+    await callback.answer()
 
 
 @router.message(RequestedAccountFlow.entering_price, F.text)
@@ -100,7 +103,7 @@ async def req_deposit(
     await services.commit()
     await message.answer(
         f"✅ درخواست اکانت شما با شماره #{req.id} ثبت شد و در حال بررسی است.",
-        reply_markup=main_menu(is_admin_user(message, db_user)),
+        reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     caption = (

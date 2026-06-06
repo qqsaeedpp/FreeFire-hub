@@ -48,28 +48,47 @@ def backup_code_menu(tutorial_key: str) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def diamond_amount_menu(plans: list[DiamondPlan]) -> InlineKeyboardMarkup:
+    """Step 1 of buying diamonds: choose the amount/plan (one per row)."""
+    kb = InlineKeyboardBuilder()
+    for plan in plans:
+        kb.button(
+            text=f"💎 {plan.name} — {format_toman(plan.price)}",
+            callback_data=DiamondCB(action="plan", value=plan.code),
+        )
+    kb.adjust(1)
+    tail = InlineKeyboardBuilder()
+    tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
 def diamond_method_menu() -> InlineKeyboardMarkup:
+    """Step 2 of buying diamonds: choose the purchase method (after the amount)."""
     kb = InlineKeyboardBuilder()
     kb.button(text="🆔 خرید با UID", callback_data=DiamondCB(action="method", value="uid"))
     kb.button(
         text="🔐 خرید با اطلاعات اکانت",
         callback_data=DiamondCB(action="method", value="account"),
     )
-    kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
     kb.adjust(1)
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target="diamond_amount"))
+    tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    tail.adjust(2)
+    kb.attach(tail)
     return kb.as_markup()
 
 
-def diamond_plans_menu(plans: list[DiamondPlan]) -> InlineKeyboardMarkup:
+def buy_account_menu() -> InlineKeyboardMarkup:
+    """Buy-account submenu: ready-made shop list vs. a requested (wanted) account."""
     kb = InlineKeyboardBuilder()
-    for plan in plans:
-        kb.button(
-            text=f"{plan.name} — {format_toman(plan.price)}",
-            callback_data=DiamondCB(action="plan", value=plan.code),
-        )
-    kb.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target="diamond_method"))
-    kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.button(text="📦 لیست اکانت‌های آماده", callback_data=AccountCB(action="ready"))
+    kb.button(text="🎯 اکانت درخواستی", callback_data=AccountCB(action="requested"))
     kb.adjust(1)
+    tail = InlineKeyboardBuilder()
+    tail.button(text="❌ بستن", callback_data=NavCB(action="cancel"))
+    kb.attach(tail)
     return kb.as_markup()
 
 

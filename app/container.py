@@ -15,6 +15,7 @@ from app.repositories.accounts import (
     RequestedAccountRepository,
 )
 from app.repositories.bot_texts import BotTextRepository
+from app.repositories.button_settings import ButtonSettingsRepository
 from app.repositories.cards import PaymentCardRepository
 from app.repositories.discounts import DiscountCodeRepository
 from app.repositories.orders import OrderRepository
@@ -25,6 +26,7 @@ from app.repositories.tutorial_media import TutorialMediaRepository
 from app.repositories.users import UserRepository
 from app.repositories.wallets import WalletRepository
 from app.services.account_service import AccountService
+from app.services.button_service import ButtonService
 from app.services.card_service import CardService
 from app.services.diamond_service import DiamondService
 from app.services.discount_service import DiscountService
@@ -55,6 +57,7 @@ class Services:
         self.discounts_repo = DiscountCodeRepository(session)
         self.bot_texts_repo = BotTextRepository(session)
         self.tutorial_repo = TutorialMediaRepository(session)
+        self.button_repo = ButtonSettingsRepository(session)
 
         # services
         self.wallet = WalletService(self.wallets_repo)
@@ -73,6 +76,7 @@ class Services:
         self.discount = DiscountService(self.discounts_repo)
         self.text = TextService(self.bot_texts_repo)
         self.tutorial = TutorialService(self.tutorial_repo)
+        self.button = ButtonService(self.button_repo)
 
     async def commit(self) -> None:
         await self.session.commit()

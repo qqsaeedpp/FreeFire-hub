@@ -11,7 +11,9 @@ from app.core.constants import TICKET_STATUS_FA
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import TicketCB
 from app.keyboards.inline import cancel_only, ticket_actions
-from app.keyboards.reply import BTN_SUPPORT, main_menu
+from app.keyboards.reply import build_main_menu
+from app.filters.buttons import MainBtn
+from app.services.button_service import BTN_KEY_SUPPORT
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import AdminReplyFlow
@@ -22,7 +24,7 @@ router = Router(name="support_tickets")
 
 
 # ----------------------------- USER SIDE -----------------------------
-@router.message(F.text == BTN_SUPPORT)
+@router.message(MainBtn(BTN_KEY_SUPPORT))
 async def support_home(message: Message, services: Services, db_user: User) -> None:
     tickets = await services.ticket.tickets.list_by_user(db_user.id)
     lines = ["🎧 <b>پشتیبانی</b>\n"]
@@ -66,7 +68,7 @@ async def ticket_message(
     await services.commit()
     await message.answer(
         f"✅ تیکت شما با شماره #{ticket.id} ثبت شد. پشتیبانی به‌زودی پاسخ می‌دهد.",
-        reply_markup=main_menu(is_admin_user(message, db_user)),
+        reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     await notifier.notify_admin(

@@ -66,6 +66,11 @@ class TutorialCB(CallbackData, prefix="tut"):
     key: str = ""
 
 
+class ButtonCB(CallbackData, prefix="btn"):
+    action: str  # view | edit_text | edit_emoji | reset | list
+    key: str = ""
+
+
 class AdminCardCB(CallbackData, prefix="acard"):
     purpose: str  # diamond | account
 
