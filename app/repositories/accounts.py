@@ -7,12 +7,16 @@ from app.core.constants import SHOP_VISIBLE_STATUSES, AccountStatus, SaleRequest
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
 from app.repositories.base import BaseRepository
 
-# Statuses an admin can act on in the sale-account management panel.
+# Statuses an admin can act on in the sale-account management panel. Sold
+# accounts are included so they can be hidden or soft-deleted; DELETED ones are
+# excluded (soft-deleted, kept only for sales history).
 _MANAGEABLE_STATUSES = (
     AccountStatus.AVAILABLE,
     AccountStatus.LISTED_FOR_SALE,
     AccountStatus.RESERVED,
     AccountStatus.HIDDEN,
+    AccountStatus.SOLD,
+    AccountStatus.SOLD_TO_ADMIN,
 )
 
 

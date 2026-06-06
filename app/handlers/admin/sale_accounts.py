@@ -116,7 +116,8 @@ async def manage_delete_prompt(
         return
     await edit_or_answer(
         callback.message,
-        f"⚠️ اکانت #{acc.id} برای همیشه حذف شود؟ این عمل قابل بازگشت نیست.",
+        f"⚠️ اکانت #{acc.id} حذف شود؟ اکانت از فروشگاه و لیست مدیریت حذف می‌شود "
+        f"ولی سابقه فروش آن حفظ خواهد شد.",
         reply_markup=manage_account_delete_confirm(acc.id, callback_data.page),
     )
     await callback.answer()

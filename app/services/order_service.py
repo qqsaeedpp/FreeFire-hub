@@ -54,5 +54,16 @@ class OrderService:
     async def cancel(self, order: Order) -> None:
         order.status = OrderStatus.CANCELLED
 
+    async def cancel_if_pending(self, order_id: int) -> None:
+        """Cancel an order only if it's still an unsubmitted draft (PENDING).
+
+        Used when a user aborts a flow mid-way: any order row already created is
+        marked CANCELLED so it never surfaces in their order history. Orders that
+        progressed past PENDING (receipt sent, wallet-paid, …) are left untouched.
+        """
+        order = await self.orders.get(order_id)
+        if order is not None and order.status == OrderStatus.PENDING:
+            order.status = OrderStatus.CANCELLED
+
     async def get(self, order_id: int) -> Order | None:
         return await self.orders.get(order_id)

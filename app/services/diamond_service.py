@@ -94,8 +94,15 @@ class DiamondService:
         password: str,
         backup_code: str | None,
         login_method: LoginMethod,
+        gmail: str | None = None,
+        gmail_password: str | None = None,
+        gmail_backup_code: str | None = None,
+        account_backup_code: str | None = None,
     ) -> DiamondOrder:
         from app.core.security import encrypt
+
+        def enc(value: str | None) -> str | None:
+            return encrypt(value) if value else None
 
         order = DiamondOrder(
             user_id=user_id,
@@ -106,6 +113,10 @@ class DiamondService:
             account_email=encrypt(email),
             account_password=encrypt(password),
             backup_code=encrypt(backup_code or ""),
+            gmail=enc(gmail),
+            gmail_password=enc(gmail_password),
+            gmail_backup_code=enc(gmail_backup_code),
+            account_backup_code=enc(account_backup_code),
             login_method=login_method,
         )
         return await self.orders.add(order)

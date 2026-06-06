@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.core.config import settings
 from app.core.constants import TransactionType
+from app.models.referral import Referral
 from app.models.user import User
 from app.repositories.referrals import ReferralRepository
 from app.services.wallet_service import WalletService
@@ -26,25 +27,40 @@ class ReferralService:
         self.wallets = wallets
         self.users = users_repo
 
-    async def reward_on_first_purchase(self, buyer: User) -> ReferralResult:
-        """Called after a successful purchase. Pays the referrer exactly once."""
-        referral = await self.referrals.get_by_referred(buyer.id)
-        if referral is None or referral.rewarded:
+    async def link_and_reward(
+        self, new_user: User, referral_code: str
+    ) -> ReferralResult:
+        """Register ``new_user`` as a referral of ``referral_code``'s owner and pay
+        the referrer once.
+
+        Anti-abuse: the referrer must exist and differ from the invitee, and the
+        invitee may be referred only once (enforced both here and by the unique
+        ``referrals.referred_id`` constraint). Callers must additionally gate this
+        on the invitee being a genuinely new user so a repeat /start can't re-pay.
+        """
+        referrer = await self.users.get_by_referral_code(referral_code)
+        if referrer is None or referrer.id == new_user.id:
+            return ReferralResult(False, None, 0)
+        if await self.referrals.get_by_referred(new_user.id):
             return ReferralResult(False, None, 0)
 
         amount = settings.referral_reward
+        new_user.referred_by_id = referrer.id
+        await self.referrals.add(
+            Referral(
+                referrer_id=referrer.id,
+                referred_id=new_user.id,
+                rewarded=True,
+                reward_amount=amount,
+            )
+        )
         await self.wallets.credit(
-            referral.referrer_id,
+            referrer.id,
             amount,
             TransactionType.REFERRAL_REWARD,
-            description=f"پاداش دعوت کاربر {buyer.telegram_id}",
+            description=f"پاداش دعوت کاربر {new_user.telegram_id}",
         )
-        referral.rewarded = True
-        referral.reward_amount = amount
-
-        referrer = await self.users.get(referral.referrer_id)
-        tg_id = referrer.telegram_id if referrer else None
-        return ReferralResult(True, tg_id, amount)
+        return ReferralResult(True, referrer.telegram_id, amount)
 
     async def stats(self, user: User) -> dict[str, int]:
         total = await self.referrals.count_by_referrer(user.id)

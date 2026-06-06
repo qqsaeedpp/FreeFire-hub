@@ -21,7 +21,7 @@ _TYPE_FA = {
 
 @router.message(F.text == BTN_MY_ORDERS)
 async def my_orders(message: Message, services: Services, db_user: User) -> None:
-    orders = await services.orders.list_by_user(db_user.id, limit=10)
+    orders = await services.orders.list_visible_by_user(db_user.id, limit=10)
     if not orders:
         await message.answer("شما هنوز سفارشی ثبت نکرده‌اید. 📦")
         return

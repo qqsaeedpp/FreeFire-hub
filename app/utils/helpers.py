@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import InlineKeyboardMarkup, Message
+from aiogram.types import InlineKeyboardMarkup, Message, MessageEntity
 from aiogram.utils.media_group import MediaGroupBuilder
 
 
@@ -30,6 +30,26 @@ async def edit_or_answer(
         else:
             await message.answer(text, reply_markup=reply_markup)
     except TelegramBadRequest:
+        await message.answer(text, reply_markup=reply_markup)
+
+
+async def answer_managed(
+    message: Message,
+    rendered: tuple[str, list[MessageEntity] | None],
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    """Send a managed (admin-editable) text rendered by ``TextService.render``.
+
+    When the text carries custom-emoji entities, send them verbatim with
+    ``parse_mode=None`` (entities and HTML are mutually exclusive). Otherwise the
+    default HTML parse mode applies, since the built-in defaults use HTML tags.
+    """
+    text, entities = rendered
+    if entities:
+        await message.answer(
+            text, entities=entities, parse_mode=None, reply_markup=reply_markup
+        )
+    else:
         await message.answer(text, reply_markup=reply_markup)
 
 

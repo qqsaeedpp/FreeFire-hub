@@ -15,6 +15,10 @@ class DiamondAccountFlow(StatesGroup):
     entering_email = State()
     entering_password = State()
     entering_backup = State()
+    entering_gmail = State()
+    entering_gmail_password = State()
+    entering_gmail_backup = State()
+    entering_account_backup = State()
     choosing_login_method = State()
     awaiting_receipt = State()
 

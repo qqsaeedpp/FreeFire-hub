@@ -23,5 +23,6 @@ class DiscountCode(Base):
     percent: Mapped[int] = mapped_column(Integer)  # 1..100
     max_uses: Mapped[int] = mapped_column(Integer, default=0)  # 0 = unlimited
     used_count: Mapped[int] = mapped_column(Integer, default=0)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

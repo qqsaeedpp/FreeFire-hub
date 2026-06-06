@@ -19,9 +19,9 @@ class UserService:
         *,
         username: str | None,
         full_name: str | None,
-        referral_code: str | None = None,
     ) -> tuple[User, bool]:
-        """Return (user, created). Links referral on first creation."""
+        """Return (user, created). Referral linkage is handled separately by the
+        deep-link /start handler via :meth:`ReferralService.link_and_reward`."""
         existing = await self.users.get_by_telegram_id(telegram_id)
         if existing:
             # keep profile fields fresh
@@ -39,24 +39,7 @@ class UserService:
         )
         user.wallet = Wallet(balance=0)
         await self.users.add(user)
-
-        if referral_code:
-            await self._link_referral(user, referral_code)
-
         return user, True
-
-    async def _link_referral(self, new_user: User, referral_code: str) -> None:
-        from app.models.referral import Referral
-
-        referrer = await self.users.get_by_referral_code(referral_code)
-        if not referrer or referrer.id == new_user.id:
-            return
-        if await self.referrals.get_by_referred(new_user.id):
-            return
-        new_user.referred_by_id = referrer.id
-        await self.referrals.add(
-            Referral(referrer_id=referrer.id, referred_id=new_user.id)
-        )
 
     async def set_banned(self, user: User, banned: bool) -> None:
         user.is_banned = banned

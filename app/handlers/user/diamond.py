@@ -28,12 +28,15 @@ router = Router(name="user_diamond")
 
 
 @router.message(F.text == BTN_BUY_DIAMOND)
-async def entry(message: Message, state: FSMContext) -> None:
+async def entry(message: Message, services: Services, state: FSMContext) -> None:
     await state.clear()
-    await message.answer(
-        "💎 <b>خرید جم</b>\nروش خرید را انتخاب کنید:",
-        reply_markup=diamond_method_menu(),
-    )
+    text, entities = await services.text.render("diamond_guide")
+    if entities:
+        await message.answer(
+            text, entities=entities, parse_mode=None, reply_markup=diamond_method_menu()
+        )
+    else:
+        await message.answer(text, reply_markup=diamond_method_menu())
 
 
 @router.callback_query(DiamondCB.filter(F.action == "method"))
@@ -151,10 +154,55 @@ async def acc_password(message: Message, state: FSMContext) -> None:
     )
 
 
+def _optional(text: str) -> str:
+    """Normalize an optional free-text answer; «ندارم»/«-» mean «not provided»."""
+    value = text.strip()
+    return "" if value in {"ندارم", "-"} else value
+
+
 @router.message(DiamondAccountFlow.entering_backup, F.text)
 async def acc_backup(message: Message, state: FSMContext) -> None:
-    backup = message.text.strip()
-    await state.update_data(backup="" if backup in {"ندارم", "-"} else backup)
+    await state.update_data(backup=_optional(message.text))
+    await state.set_state(DiamondAccountFlow.entering_gmail)
+    await message.answer(
+        "📧 جیمیل اکانت را ارسال کنید (اگر ندارید بنویسید «ندارم»):",
+        reply_markup=cancel_only(),
+    )
+
+
+@router.message(DiamondAccountFlow.entering_gmail, F.text)
+async def acc_gmail(message: Message, state: FSMContext) -> None:
+    await state.update_data(gmail=_optional(message.text))
+    await state.set_state(DiamondAccountFlow.entering_gmail_password)
+    await message.answer(
+        "🔑 رمز جیمیل را ارسال کنید (اگر ندارید بنویسید «ندارم»):",
+        reply_markup=cancel_only(),
+    )
+
+
+@router.message(DiamondAccountFlow.entering_gmail_password, F.text)
+async def acc_gmail_password(message: Message, state: FSMContext) -> None:
+    await state.update_data(gmail_password=_optional(message.text))
+    await state.set_state(DiamondAccountFlow.entering_gmail_backup)
+    await message.answer(
+        "🧩 کد بکاپ جیمیل را ارسال کنید (اگر ندارید بنویسید «ندارم»):",
+        reply_markup=cancel_only(),
+    )
+
+
+@router.message(DiamondAccountFlow.entering_gmail_backup, F.text)
+async def acc_gmail_backup(message: Message, state: FSMContext) -> None:
+    await state.update_data(gmail_backup=_optional(message.text))
+    await state.set_state(DiamondAccountFlow.entering_account_backup)
+    await message.answer(
+        "🧷 کد بکاپ اکانت را ارسال کنید (اگر ندارید بنویسید «ندارم»):",
+        reply_markup=cancel_only(),
+    )
+
+
+@router.message(DiamondAccountFlow.entering_account_backup, F.text)
+async def acc_account_backup(message: Message, state: FSMContext) -> None:
+    await state.update_data(account_backup=_optional(message.text))
     await state.set_state(DiamondAccountFlow.choosing_login_method)
     await message.answer("🔐 روش ورود به اکانت را انتخاب کنید:", reply_markup=login_method_menu())
 
@@ -178,6 +226,10 @@ async def acc_login_method(
         password=data["password"],
         backup_code=data.get("backup", ""),
         login_method=LoginMethod(callback_data.method),
+        gmail=data.get("gmail"),
+        gmail_password=data.get("gmail_password"),
+        gmail_backup_code=data.get("gmail_backup"),
+        account_backup_code=data.get("account_backup"),
     )
     await services.commit()
     await state.update_data(order_id=order.id)

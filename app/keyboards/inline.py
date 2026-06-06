@@ -209,7 +209,10 @@ def admin_order_review(order_id: int) -> InlineKeyboardMarkup:
     kb.button(
         text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id)
     )
-    kb.adjust(2, 1)
+    kb.button(
+        text="👁 جزئیات سفارش", callback_data=AdminOrderCB(action="details", order_id=order_id)
+    )
+    kb.adjust(2, 1, 1)
     return kb.as_markup()
 
 

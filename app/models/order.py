@@ -53,10 +53,15 @@ class DiamondOrder(Order):
 
     # UID flow
     uid: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    # account-credentials flow (encrypted)
+    # account-credentials flow (all encrypted)
     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     account_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     backup_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # extra recovery details collected for the account-credentials flow
+    gmail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gmail_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gmail_backup_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    account_backup_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
     login_method: Mapped[LoginMethod | None] = mapped_column(
         Enum(LoginMethod), nullable=True
     )

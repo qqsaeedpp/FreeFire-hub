@@ -88,7 +88,14 @@ class AccountService:
         account.status = AccountStatus.AVAILABLE
 
     async def remove(self, account: Account) -> None:
-        await self.accounts.delete(account)
+        """Soft-delete: flag the account DELETED so the sales record survives.
+
+        Deleted accounts drop out of both the shop (only SHOP_VISIBLE_STATUSES are
+        listed) and the admin management list (DELETED isn't manageable), but the
+        row — and any linked order history — is preserved.
+        """
+        account.status = AccountStatus.DELETED
+        account.reserved_by_id = None
 
     async def update_fields(self, account: Account, **fields) -> None:
         for key, value in fields.items():

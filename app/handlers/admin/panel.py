@@ -33,7 +33,8 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="🎁 قرعه‌کشی", callback_data=AdminCB(action="lottery"))
     kb.button(text="👛 تنظیم موجودی کاربر", callback_data=AdminCB(action="wallet_adjust"))
     kb.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
-    kb.adjust(2, 2, 2, 2, 2)
+    kb.button(text="📝 مدیریت متن‌های ربات", callback_data=AdminCB(action="texts"))
+    kb.adjust(2, 2, 2, 2, 2, 1)
     return kb.as_markup()
 
 
@@ -61,6 +62,17 @@ async def stats(callback: CallbackQuery, services: Services) -> None:
         f"🛒 اکانت‌های موجود: {available_accounts}"
     )
     await callback.message.edit_text(text, reply_markup=admin_menu())
+    await callback.answer()
+
+
+@router.callback_query(AdminCB.filter(F.action == "back_home"), IsAdmin())
+async def back_home(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await edit_or_answer(
+        callback.message,
+        "🛠 <b>پنل مدیریت</b>\nیک گزینه را انتخاب کنید:",
+        reply_markup=admin_menu(),
+    )
     await callback.answer()
 
 

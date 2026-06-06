@@ -23,6 +23,25 @@ class OrderRepository(BaseRepository[Order]):
         )
         return list(result.scalars().all())
 
+    async def list_visible_by_user(
+        self, user_id: int, *, offset: int = 0, limit: int = 10
+    ) -> list[Order]:
+        """Orders a user should see in «my orders» — excludes drafts (PENDING,
+        i.e. created but never paid/submitted) and cancelled orders."""
+        result = await self.session.execute(
+            select(Order)
+            .where(
+                Order.user_id == user_id,
+                Order.status.notin_(
+                    (OrderStatus.PENDING, OrderStatus.CANCELLED)
+                ),
+            )
+            .order_by(Order.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def list_by_status(
         self, status: OrderStatus, *, offset: int = 0, limit: int = 10
     ) -> list[Order]:

@@ -42,6 +42,52 @@ async def pending_orders(callback: CallbackQuery, services: Services) -> None:
     await callback.answer()
 
 
+@router.callback_query(AdminOrderCB.filter(F.action == "details"), IsAdmin())
+async def order_details(
+    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services
+) -> None:
+    order = await services.order.get(callback_data.order_id)
+    if order is None:
+        await callback.answer("سفارش یافت نشد.", show_alert=True)
+        return
+    user = await services.users.get(order.user_id)
+    lines = [
+        f"📄 <b>جزئیات سفارش #{order.id}</b>",
+        f"کاربر: {user_ref(user)}",
+        f"نوع: {order.order_type}",
+        f"مبلغ: {format_toman(order.amount)}",
+        f"وضعیت: {ORDER_STATUS_FA.get(order.status, order.status)}",
+    ]
+
+    if order.order_type in (OrderType.DIAMOND_UID, OrderType.DIAMOND_ACCOUNT):
+        diamond = await services.orders.get_diamond(order.id)
+        if diamond:
+            lines.append(f"پلن: {diamond.plan_name} ({diamond.diamonds} الماس)")
+            if order.order_type == OrderType.DIAMOND_UID:
+                lines.append(f"🆔 UID: <code>{diamond.uid}</code>")
+            else:
+                def dec(value: str | None) -> str:
+                    return decrypt(value) if value else "-"
+
+                lines += [
+                    f"🔐 روش ورود: {diamond.login_method.value if diamond.login_method else '-'}",
+                    f"📧 ایمیل اکانت: <code>{dec(diamond.account_email)}</code>",
+                    f"🔑 رمز اکانت: <code>{dec(diamond.account_password)}</code>",
+                    f"🧩 کد بکاپ: <code>{dec(diamond.backup_code)}</code>",
+                    f"📧 جیمیل: <code>{dec(diamond.gmail)}</code>",
+                    f"🔑 رمز جیمیل: <code>{dec(diamond.gmail_password)}</code>",
+                    f"🧩 بکاپ جیمیل: <code>{dec(diamond.gmail_backup_code)}</code>",
+                    f"🧷 بکاپ اکانت: <code>{dec(diamond.account_backup_code)}</code>",
+                ]
+    elif order.order_type == OrderType.ACCOUNT_PURCHASE:
+        acc_order = await services.orders.get_account_order(order.id)
+        if acc_order:
+            lines.append(f"🛒 اکانت: #{acc_order.account_id}")
+
+    await callback.message.answer("\n".join(lines))
+    await callback.answer()
+
+
 @router.callback_query(AdminOrderCB.filter(F.action == "approve"), IsAdmin())
 async def approve(
     callback: CallbackQuery, callback_data: AdminOrderCB, services: Services, bot
@@ -92,20 +138,10 @@ async def complete(
             user.telegram_id, f"🏁 سفارش #{order.id} شما با موفقیت تکمیل شد. ممنون از خرید شما!"
         )
 
-    # First successful purchase -> mark + reward referrer.
+    # Track the user's first successful purchase (referral payouts now happen on
+    # join, so completion only records the purchase flag).
     if user and not user.has_purchased:
         await services.user.mark_purchased(user)
-        result = await services.referral.reward_on_first_purchase(user)
-        if result.rewarded and result.referrer_telegram_id:
-            await notifier.notify_user(
-                result.referrer_telegram_id,
-                f"🎁 یکی از زیرمجموعه‌های شما اولین خرید خود را انجام داد!\n"
-                f"مبلغ {format_toman(result.amount)} به کیف پول شما اضافه شد.",
-            )
-            await notifier.log_event(
-                "ثبت زیرمجموعه",
-                {"معرف": str(result.referrer_telegram_id), "پاداش": format_toman(result.amount)},
-            )
 
     await services.commit()
     await notifier.log_event(

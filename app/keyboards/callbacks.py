@@ -55,7 +55,13 @@ class AdminSaleCB(CallbackData, prefix="asale"):
 
 
 class DiscountCB(CallbackData, prefix="disc"):
-    action: str  # have | skip
+    action: str  # have | skip (user) | view | edit_percent | edit_uses | edit_start | edit_expiry | toggle | delete | confirm_delete | list (admin)
+    code_id: int = 0
+
+
+class BotTextCB(CallbackData, prefix="btxt"):
+    action: str  # view | edit | reset | list
+    key: str = ""
 
 
 class AdminCardCB(CallbackData, prefix="acard"):

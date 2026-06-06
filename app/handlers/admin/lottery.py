@@ -52,9 +52,14 @@ async def lottery_draw(
         return
 
     winners = random.sample(users, k=min(count, len(users)))
-    await message.answer(
-        f"🎉 قرعه‌کشی انجام شد. {len(winners)} برنده انتخاب شدند و اعلام می‌شوند."
-    )
+
+    # Admin-facing result: numeric id + username + name (when present) per winner.
+    admin_lines = [f"🎉 <b>برندگان قرعه‌کشی</b> ({len(winners)} نفر)\n"]
+    for w in winners:
+        handle = f"@{w.username}" if w.username else "بدون یوزرنیم"
+        name = f" | {w.full_name}" if w.full_name else ""
+        admin_lines.append(f"👤 کاربر: <code>{w.telegram_id}</code> | {handle}{name}")
+    await message.answer("\n".join(admin_lines))
 
     # Announce in the channel.
     notifier = NotificationService(bot)

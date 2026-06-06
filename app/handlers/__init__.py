@@ -12,6 +12,7 @@ from app.handlers.admin import lottery as admin_lottery
 from app.handlers.admin import orders as admin_orders
 from app.handlers.admin import panel as admin_panel
 from app.handlers.admin import sale_accounts as admin_sale_accounts
+from app.handlers.admin import texts as admin_texts
 from app.handlers.support import tickets as support_tickets
 from app.handlers.user import account as user_account
 from app.handlers.user import common as user_common
@@ -34,6 +35,7 @@ def register_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_discounts.router)
     dp.include_router(admin_lottery.router)
     dp.include_router(admin_broadcast.router)
+    dp.include_router(admin_texts.router)
 
     dp.include_router(support_tickets.router)
 

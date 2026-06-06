@@ -22,7 +22,7 @@ async def referral_home(
     link = f"https://t.me/{me.username}?start={db_user.referral_code}"
     text = (
         "🎁 <b>زیرمجموعه‌گیری</b>\n\n"
-        f"به‌ازای هر دوست که با لینک شما عضو شود و <b>اولین خرید موفق</b> را انجام دهد، "
+        f"به‌ازای هر دوست جدید که با لینک شما در ربات عضو شود، "
         f"<b>{format_toman(settings.referral_reward)}</b> به کیف پول شما اضافه می‌شود.\n\n"
         f"🔗 لینک دعوت شما:\n{link}\n\n"
         f"🆔 کد معرف: <code>{db_user.referral_code}</code>\n\n"

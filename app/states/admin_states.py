@@ -48,3 +48,18 @@ class LotteryFlow(StatesGroup):
 class AccountEditFlow(StatesGroup):
     entering_price = State()
     entering_title = State()
+
+
+class DiscountEditFlow(StatesGroup):
+    """Edit a single field of an existing discount code."""
+
+    entering_percent = State()
+    entering_max_uses = State()
+    entering_start_days = State()
+    entering_expiry_days = State()
+
+
+class BotTextEditFlow(StatesGroup):
+    """Capture a replacement for an admin-editable bot text (with entities)."""
+
+    entering_text = State()
