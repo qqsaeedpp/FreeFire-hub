@@ -8,9 +8,11 @@ from app.core.constants import LoginMethod
 from app.keyboards.callbacks import (
     AccountCB,
     AdminOrderCB,
+    AdminSaleCB,
     DiamondCB,
     LoginMethodCB,
     NavCB,
+    PayMethodCB,
     TicketCB,
 )
 from app.services.diamond_service import DiamondPlan
@@ -116,6 +118,26 @@ def pay_options(order_id: int, can_use_wallet: bool) -> InlineKeyboardMarkup:
     if can_use_wallet:
         kb.button(text="👛 پرداخت از کیف پول", callback_data=NavCB(action="pay_wallet"))
     kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def payment_method_menu() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="💳 پرداخت آنلاین", callback_data=PayMethodCB(method="online"))
+    kb.button(text="🏦 کارت به کارت", callback_data=PayMethodCB(method="card_to_card"))
+    kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def admin_sale_review(account_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ خرید اکانت", callback_data=AdminSaleCB(action="buy", account_id=account_id))
+    kb.button(
+        text="📋 افزودن به لیست فروش",
+        callback_data=AdminSaleCB(action="list", account_id=account_id),
+    )
     kb.adjust(1)
     return kb.as_markup()
 

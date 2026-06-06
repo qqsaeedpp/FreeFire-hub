@@ -13,7 +13,7 @@ from app.keyboards.callbacks import NavCB
 from app.keyboards.reply import main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
-from app.utils.helpers import edit_or_answer, format_toman
+from app.utils.helpers import edit_or_answer, format_toman, user_ref
 
 router = Router(name="user_common")
 log = get_logger("user.common")
@@ -47,7 +47,7 @@ async def start_with_ref(
         await services.commit()
         await NotificationService(bot).log_event(
             "زیرمجموعه جدید",
-            {"کاربر": str(db_user.telegram_id), "کد معرف": ref},
+            {"کاربر": user_ref(db_user), "کد معرف": ref},
         )
     await message.answer(
         WELCOME, reply_markup=main_menu(_is_admin(db_user, message.from_user.id))

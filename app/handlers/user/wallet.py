@@ -7,13 +7,14 @@ from aiogram.types import Message
 
 from app.container import Services
 from app.core.config import settings
-from app.core.constants import TransactionType
+from app.core.constants import PAYMENT_METHOD_FA, PaymentMethod, TransactionType
+from app.handlers.user.payment import prompt_payment_method
 from app.keyboards.inline import cancel_only
 from app.keyboards.reply import BTN_WALLET, main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import WalletFlow
-from app.utils.helpers import format_toman
+from app.utils.helpers import format_toman, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="user_wallet")
@@ -63,12 +64,12 @@ async def topup_amount(message: Message, state: FSMContext) -> None:
         await message.answer("❌ مبلغ نامعتبر است (حداقل ۱۰,۰۰۰ تومان).")
         return
     await state.update_data(amount=amount)
-    await state.set_state(WalletFlow.awaiting_topup_receipt)
-    await message.answer(
-        f"💳 مبلغ <b>{format_toman(amount)}</b> را به کارت زیر واریز کنید:\n"
-        f"<code>{settings.card_number}</code>\nبه نام: <b>{settings.card_holder}</b>\n\n"
-        "سپس تصویر رسید را ارسال کنید. 📸",
-        reply_markup=cancel_only(),
+    await prompt_payment_method(
+        message,
+        state,
+        order_id=None,
+        amount=amount,
+        receipt_state=WalletFlow.awaiting_topup_receipt,
     )
 
 
@@ -78,6 +79,9 @@ async def topup_receipt(
 ) -> None:
     data = await state.get_data()
     amount = data["amount"]
+    method_fa = PAYMENT_METHOD_FA.get(
+        PaymentMethod(data["pay_method"]) if data.get("pay_method") else None, "-"
+    )
     file_id = message.photo[-1].file_id
     await message.answer(
         "✅ رسید شارژ کیف پول دریافت شد و پس از تایید پشتیبانی به موجودی شما اضافه می‌شود.",
@@ -94,7 +98,9 @@ async def topup_receipt(
     )
     caption = (
         f"💳 <b>درخواست شارژ کیف پول</b>\n"
-        f"کاربر: <code>{db_user.telegram_id}</code>\nمبلغ: {format_toman(amount)}"
+        f"کاربر: {user_ref(db_user)}\n"
+        f"روش پرداخت: {method_fa}\n"
+        f"مبلغ: {format_toman(amount)}"
     )
     try:
         await bot.send_photo(
@@ -103,7 +109,7 @@ async def topup_receipt(
     except Exception:  # noqa: BLE001
         await notifier.notify_admin(caption, reply_markup=kb.as_markup())
     await notifier.log_event(
-        "پرداخت", {"نوع": "شارژ کیف پول", "کاربر": str(db_user.telegram_id), "مبلغ": format_toman(amount)}
+        "پرداخت", {"نوع": "شارژ کیف پول", "کاربر": user_ref(db_user), "مبلغ": format_toman(amount)}
     )
     await state.clear()
 

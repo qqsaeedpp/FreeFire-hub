@@ -43,12 +43,29 @@ class AccountService:
     async def get(self, account_id: int) -> Account | None:
         return await self.accounts.get(account_id)
 
-    # ---- admin: create a listing ----
-    async def create_listing(self, *, credentials: str | None = None, **fields) -> Account:
+    # ---- create a listing (shared by admin & user sell flows) ----
+    async def create_listing(
+        self,
+        *,
+        credentials: str | None = None,
+        save_info: str | None = None,
+        **fields,
+    ) -> Account:
         account = Account(**fields)
         if credentials:
             account.credentials = encrypt(credentials)
+        if save_info:
+            account.save_info = encrypt(save_info)
         return await self.accounts.add(account)
+
+    # ---- admin decisions on a user-listed (pending-review) account ----
+    async def buy_from_seller(self, account: Account) -> None:
+        """Admin purchases the account directly from the seller."""
+        account.status = AccountStatus.SOLD_TO_ADMIN
+
+    async def publish_listing(self, account: Account) -> None:
+        """Admin pushes a user-listed account into the public shop."""
+        account.status = AccountStatus.AVAILABLE
 
     # ---- purchase flow ----
     async def reserve(self, account_id: int, buyer_user_id: int) -> Account:

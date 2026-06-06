@@ -1,7 +1,7 @@
 """Order service — payment receipts, admin approval/rejection, completion."""
 from __future__ import annotations
 
-from app.core.constants import OrderStatus, PaymentStatus
+from app.core.constants import OrderStatus, PaymentMethod, PaymentStatus
 from app.models.order import Order
 from app.models.payment import Payment
 from app.repositories.orders import OrderRepository
@@ -12,6 +12,9 @@ class OrderService:
     def __init__(self, orders: OrderRepository, payments: PaymentRepository) -> None:
         self.orders = orders
         self.payments = payments
+
+    async def set_payment_method(self, order: Order, method: PaymentMethod) -> None:
+        order.payment_method = method
 
     async def attach_receipt(self, order: Order, receipt_file_id: str) -> Payment:
         payment = await self.payments.get_by_order_id(order.id)

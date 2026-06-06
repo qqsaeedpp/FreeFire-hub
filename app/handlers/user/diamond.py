@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
 from app.core.config import settings
-from app.core.constants import LoginMethod
+from app.core.constants import PAYMENT_METHOD_FA, LoginMethod
 from app.keyboards.callbacks import DiamondCB, LoginMethodCB, NavCB
 from app.keyboards.inline import (
     cancel_only,
@@ -18,22 +18,13 @@ from app.keyboards.inline import (
 )
 from app.keyboards.reply import BTN_BUY_DIAMOND, main_menu
 from app.models.user import User
+from app.handlers.user.payment import prompt_payment_method
 from app.services.notification_service import NotificationService
 from app.states.user_states import DiamondAccountFlow, DiamondUIDFlow
-from app.utils.helpers import edit_or_answer, format_toman
+from app.utils.helpers import edit_or_answer, format_toman, user_ref
 from app.utils.validators import is_valid_email, is_valid_uid
 
 router = Router(name="user_diamond")
-
-
-def _payment_text(amount: int) -> str:
-    return (
-        f"💳 مبلغ قابل پرداخت: <b>{format_toman(amount)}</b>\n\n"
-        f"لطفاً مبلغ را به کارت زیر واریز کنید:\n"
-        f"<code>{settings.card_number}</code>\n"
-        f"به نام: <b>{settings.card_holder}</b>\n\n"
-        f"سپس <b>تصویر رسید</b> را همین‌جا ارسال کنید. 📸"
-    )
 
 
 @router.message(F.text == BTN_BUY_DIAMOND)
@@ -102,8 +93,13 @@ async def uid_received(
     order = await services.diamond.create_uid_order(db_user.id, plan, uid)
     await services.commit()
     await state.update_data(order_id=order.id, uid=uid)
-    await state.set_state(DiamondUIDFlow.awaiting_receipt)
-    await message.answer(_payment_text(plan.price), reply_markup=cancel_only())
+    await prompt_payment_method(
+        message,
+        state,
+        order_id=order.id,
+        amount=plan.price,
+        receipt_state=DiamondUIDFlow.awaiting_receipt,
+    )
 
 
 @router.message(DiamondUIDFlow.awaiting_receipt, F.photo)
@@ -185,12 +181,14 @@ async def acc_login_method(
     )
     await services.commit()
     await state.update_data(order_id=order.id)
-    await state.set_state(DiamondAccountFlow.awaiting_receipt)
-    await callback.message.edit_text(
-        "اطلاعات ثبت شد. ✅\n\n" + _payment_text(plan.price),
-        reply_markup=cancel_only(),
+    await prompt_payment_method(
+        callback,
+        state,
+        order_id=order.id,
+        amount=plan.price,
+        receipt_state=DiamondAccountFlow.awaiting_receipt,
+        prefix="اطلاعات ثبت شد. ✅\n\n",
     )
-    await callback.answer()
 
 
 @router.message(DiamondAccountFlow.awaiting_receipt, F.photo)
@@ -223,11 +221,12 @@ async def _finalize_receipt(
     notifier = NotificationService(bot)
     from app.keyboards.inline import admin_order_review
 
+    method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
     caption = (
         f"🆕 <b>سفارش جدید جم</b>\n"
         f"سفارش: #{order.id}\n"
-        f"کاربر: <code>{db_user.telegram_id}</code>"
-        f"{' (@' + db_user.username + ')' if db_user.username else ''}\n"
+        f"کاربر: {user_ref(db_user)}\n"
+        f"روش پرداخت: {method_fa}\n"
         f"مبلغ: {format_toman(order.amount)}"
     )
     try:
@@ -242,7 +241,7 @@ async def _finalize_receipt(
 
     await notifier.log_event(
         "سفارش جم",
-        {"سفارش": f"#{order.id}", "کاربر": str(db_user.telegram_id), "مبلغ": format_toman(order.amount)},
+        {"سفارش": f"#{order.id}", "کاربر": user_ref(db_user), "مبلغ": format_toman(order.amount)},
     )
     await state.clear()
 

@@ -25,12 +25,27 @@ class AccountPurchaseFlow(StatesGroup):
     awaiting_receipt = State()
 
 
-class SellAccountFlow(StatesGroup):
-    entering_price = State()
-    entering_elite = State()
-    entering_skins = State()
-    entering_description = State()
-    sending_images = State()
+class AccountFormFlow(StatesGroup):
+    """Unified account-listing form, shared by the admin 'add account' entry and
+    the user 'sell account' entry. ``mode`` in the FSM data is 'admin' or 'user'."""
+
+    title = State()
+    price = State()
+    level = State()
+    elite = State()
+    skins = State()
+    gun_skins = State()
+    description = State()
+    images = State()
+    save_info = State()
+    login_info = State()
+    special_items = State()
+
+
+class PaymentFlow(StatesGroup):
+    """Generic 'choose a payment method' step inserted before payment details."""
+
+    choosing_method = State()
 
 
 class RequestedAccountFlow(StatesGroup):

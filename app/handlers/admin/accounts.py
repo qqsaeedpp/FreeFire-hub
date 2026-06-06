@@ -1,4 +1,10 @@
-"""Admin: add account listings and edit diamond plan prices."""
+"""Admin: review user-listed accounts and edit diamond plan prices.
+
+The account-creation form (both admin and user paths) now lives in
+``app.handlers.account_form``. This module keeps the admin-only decisions on a
+user-submitted listing (buy it directly vs. publish it to the shop) and the
+diamond-plan price editor.
+"""
 from __future__ import annotations
 
 from aiogram import F, Router
@@ -8,122 +14,82 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.container import Services
 from app.filters.admin import IsAdmin
-from app.keyboards.callbacks import AdminCB
+from app.keyboards.callbacks import AdminCB, AdminSaleCB
 from app.keyboards.inline import cancel_only
-from app.states.admin_states import AddAccountFlow, EditDiamondPrice
+from app.services.notification_service import NotificationService
+from app.states.admin_states import EditDiamondPrice
 from app.utils.helpers import edit_or_answer, format_toman
 from app.utils.validators import parse_price
 
 router = Router(name="admin_accounts")
 
 
-# ============================ ADD ACCOUNT ============================
-@router.callback_query(AdminCB.filter(F.action == "add_account"), IsAdmin())
-async def add_start(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.set_state(AddAccountFlow.title)
-    await edit_or_answer(
-        callback.message, "➕ عنوان اکانت را وارد کنید:", reply_markup=cancel_only()
+# ===================== ADMIN DECISIONS ON A USER LISTING =====================
+async def _notify_seller(bot, services: Services, account, text: str) -> None:
+    """Best-effort DM to the seller; never breaks the admin flow."""
+    if account.seller_user_id is None:
+        return
+    seller = await services.users.get(account.seller_user_id)
+    if seller is None:
+        return
+    try:
+        await bot.send_message(seller.telegram_id, text)
+    except Exception:  # noqa: BLE001 - seller may have blocked the bot
+        pass
+
+
+@router.callback_query(AdminSaleCB.filter(F.action == "buy"), IsAdmin())
+async def sale_buy(
+    callback: CallbackQuery, callback_data: AdminSaleCB, services: Services, bot
+) -> None:
+    account = await services.account.get(callback_data.account_id)
+    if account is None:
+        await callback.answer("اکانت یافت نشد.", show_alert=True)
+        return
+    await services.account.buy_from_seller(account)
+    await services.commit()
+
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(
+        f"✅ اکانت #{account.id} توسط شما خریداری شد و در بخش مدیریت ثبت گردید."
+    )
+    await _notify_seller(
+        bot,
+        services,
+        account,
+        f"✅ اکانت شما (#{account.id}) توسط پشتیبانی خریداری شد.",
+    )
+    await NotificationService(bot).log_event(
+        "خرید اکانت توسط ادمین", {"اکانت": f"#{account.id}"}
     )
     await callback.answer()
 
 
-@router.message(AddAccountFlow.title, F.text, IsAdmin())
-async def add_title(message: Message, state: FSMContext) -> None:
-    await state.update_data(title=message.text.strip())
-    await state.set_state(AddAccountFlow.price)
-    await message.answer("💵 قیمت (تومان):", reply_markup=cancel_only())
-
-
-@router.message(AddAccountFlow.price, F.text, IsAdmin())
-async def add_price(message: Message, state: FSMContext) -> None:
-    price = parse_price(message.text)
-    if price is None or price <= 0:
-        await message.answer("قیمت نامعتبر.")
-        return
-    await state.update_data(price=price)
-    await state.set_state(AddAccountFlow.level)
-    await message.answer("🎚 لول اکانت:", reply_markup=cancel_only())
-
-
-@router.message(AddAccountFlow.level, F.text, IsAdmin())
-async def add_level(message: Message, state: FSMContext) -> None:
-    await state.update_data(level=parse_price(message.text) or 0)
-    await state.set_state(AddAccountFlow.skins)
-    await message.answer("🎽 تعداد اسکین:", reply_markup=cancel_only())
-
-
-@router.message(AddAccountFlow.skins, F.text, IsAdmin())
-async def add_skins(message: Message, state: FSMContext) -> None:
-    await state.update_data(skins=parse_price(message.text) or 0)
-    await state.set_state(AddAccountFlow.elite)
-    await message.answer("⭐️ تعداد الیت پس:", reply_markup=cancel_only())
-
-
-@router.message(AddAccountFlow.elite, F.text, IsAdmin())
-async def add_elite(message: Message, state: FSMContext) -> None:
-    await state.update_data(elite=parse_price(message.text) or 0)
-    await state.set_state(AddAccountFlow.gun_skins)
-    await message.answer("🔫 تعداد اسکین اسلحه:", reply_markup=cancel_only())
-
-
-@router.message(AddAccountFlow.gun_skins, F.text, IsAdmin())
-async def add_gun_skins(message: Message, state: FSMContext) -> None:
-    await state.update_data(gun_skins=parse_price(message.text) or 0)
-    await state.set_state(AddAccountFlow.description)
-    await message.answer("📝 توضیحات:", reply_markup=cancel_only())
-
-
-@router.message(AddAccountFlow.description, F.text, IsAdmin())
-async def add_description(message: Message, state: FSMContext) -> None:
-    await state.update_data(description=message.text.strip(), images=[])
-    await state.set_state(AddAccountFlow.images)
-    await message.answer(
-        "📸 تصاویر اکانت را ارسال کنید. پس از اتمام /done را بزنید.",
-        reply_markup=cancel_only(),
-    )
-
-
-@router.message(AddAccountFlow.images, F.photo, IsAdmin())
-async def add_image(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    images = data.get("images", [])
-    images.append(message.photo[-1].file_id)
-    await state.update_data(images=images)
-    await message.answer(f"تصویر {len(images)} ذخیره شد. /done برای ادامه.")
-
-
-@router.message(AddAccountFlow.images, F.text == "/done", IsAdmin())
-async def add_images_done(message: Message, state: FSMContext) -> None:
-    await state.set_state(AddAccountFlow.credentials)
-    await message.answer(
-        "🔐 اطلاعات ورود اکانت را وارد کنید (ایمیل/رمز/...).\n"
-        "این اطلاعات رمزنگاری شده ذخیره و فقط پس از خرید تحویل می‌شود.\n"
-        "اگر فعلاً ندارید «-» بفرستید.",
-        reply_markup=cancel_only(),
-    )
-
-
-@router.message(AddAccountFlow.credentials, F.text, IsAdmin())
-async def add_credentials(
-    message: Message, services: Services, state: FSMContext
+@router.callback_query(AdminSaleCB.filter(F.action == "list"), IsAdmin())
+async def sale_list(
+    callback: CallbackQuery, callback_data: AdminSaleCB, services: Services, bot
 ) -> None:
-    data = await state.get_data()
-    creds = message.text.strip()
-    creds = None if creds == "-" else creds
-    account = await services.account.create_listing(
-        title=data["title"],
-        price=data["price"],
-        level=data["level"],
-        skins_count=data["skins"],
-        elite_count=data["elite"],
-        gun_skins_count=data["gun_skins"],
-        description=data["description"],
-        images=",".join(data.get("images", [])),
-        credentials=creds,
-    )
+    account = await services.account.get(callback_data.account_id)
+    if account is None:
+        await callback.answer("اکانت یافت نشد.", show_alert=True)
+        return
+    await services.account.publish_listing(account)
     await services.commit()
-    await message.answer(f"✅ اکانت #{account.id} با موفقیت ثبت و منتشر شد.")
-    await state.clear()
+
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(
+        f"📋 اکانت #{account.id} به فروشگاه اضافه شد و برای همه نمایش داده می‌شود."
+    )
+    await _notify_seller(
+        bot,
+        services,
+        account,
+        f"📋 اکانت شما (#{account.id}) در فروشگاه منتشر شد و برای فروش در دسترس است.",
+    )
+    await NotificationService(bot).log_event(
+        "انتشار اکانت کاربر", {"اکانت": f"#{account.id}"}
+    )
+    await callback.answer()
 
 
 # ============================ DIAMOND PRICES ============================

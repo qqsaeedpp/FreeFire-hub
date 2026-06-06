@@ -16,6 +16,7 @@ from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import AdminReplyFlow
 from app.states.user_states import TicketFlow
+from app.utils.helpers import user_ref
 
 router = Router(name="support_tickets")
 
@@ -71,12 +72,12 @@ async def ticket_message(
     await notifier.notify_admin(
         f"🎧 <b>تیکت جدید</b> #{ticket.id}\n"
         f"موضوع: {data['subject']}\n"
-        f"کاربر: <code>{db_user.telegram_id}</code>\n"
+        f"کاربر: {user_ref(db_user)}\n"
         f"پیام: {text or '[فایل]'}",
         reply_markup=ticket_actions(ticket.id, is_admin=True),
     )
     await notifier.log_event(
-        "ثبت تیکت", {"تیکت": f"#{ticket.id}", "کاربر": str(db_user.telegram_id)}
+        "ثبت تیکت", {"تیکت": f"#{ticket.id}", "کاربر": user_ref(db_user)}
     )
     await state.clear()
 

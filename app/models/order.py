@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import BigInteger, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.constants import LoginMethod, OrderStatus, OrderType
+from app.core.constants import LoginMethod, OrderStatus, OrderType, PaymentMethod
 from app.core.database import Base
 
 if TYPE_CHECKING:
@@ -26,6 +26,9 @@ class Order(Base):
         Enum(OrderStatus), default=OrderStatus.PENDING, index=True
     )
     paid_from_wallet: Mapped[bool] = mapped_column(default=False)
+    payment_method: Mapped[PaymentMethod | None] = mapped_column(
+        Enum(PaymentMethod), nullable=True
+    )
     admin_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # discriminator for the joined-table specializations

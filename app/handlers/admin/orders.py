@@ -6,7 +6,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
-from app.core.constants import ORDER_STATUS_FA, OrderStatus, OrderType
+from app.core.constants import (
+    ORDER_STATUS_FA,
+    PAYMENT_METHOD_FA,
+    OrderStatus,
+    OrderType,
+)
 from app.core.security import decrypt
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminOrderCB
@@ -14,7 +19,7 @@ from app.keyboards.inline import admin_order_review
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import RejectReasonFlow
-from app.utils.helpers import format_toman
+from app.utils.helpers import format_toman, user_ref
 
 router = Router(name="admin_orders")
 
@@ -27,9 +32,10 @@ async def pending_orders(callback: CallbackQuery, services: Services) -> None:
         return
     for o in orders:
         user = await services.users.get(o.user_id)
-        tg = user.telegram_id if user else "?"
+        method_fa = PAYMENT_METHOD_FA.get(o.payment_method, "-")
         await callback.message.answer(
-            f"🧾 سفارش #{o.id}\nنوع: {o.order_type}\nکاربر: <code>{tg}</code>\n"
+            f"🧾 سفارش #{o.id}\nنوع: {o.order_type}\nکاربر: {user_ref(user)}\n"
+            f"روش پرداخت: {method_fa}\n"
             f"مبلغ: {format_toman(o.amount)}\nوضعیت: {ORDER_STATUS_FA.get(o.status, o.status)}",
             reply_markup=admin_order_review(o.id),
         )

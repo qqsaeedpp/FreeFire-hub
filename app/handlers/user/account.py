@@ -7,13 +7,13 @@ from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
 from app.core.config import settings
-from app.core.constants import PAGE_SIZE
+from app.core.constants import PAGE_SIZE, PAYMENT_METHOD_FA
+from app.handlers.user.payment import prompt_payment_method
 from app.keyboards.callbacks import AccountCB
 from app.keyboards.inline import (
     account_detail_menu,
     accounts_list_menu,
     admin_order_review,
-    cancel_only,
 )
 from app.keyboards.reply import BTN_BUY_ACCOUNT, main_menu
 from app.models.account import Account
@@ -21,7 +21,14 @@ from app.models.user import User
 from app.services.account_service import AccountReservationError
 from app.services.notification_service import NotificationService
 from app.states.user_states import AccountPurchaseFlow
-from app.utils.helpers import edit_or_answer, format_toman, paginate_meta
+from app.utils.helpers import (
+    edit_or_answer,
+    format_toman,
+    paginate_meta,
+    parse_images,
+    send_album,
+    user_ref,
+)
 
 router = Router(name="user_account")
 
@@ -83,16 +90,15 @@ async def view_account(
     if acc is None:
         await callback.answer("اکانت یافت نشد.", show_alert=True)
         return
-    images = (acc.images or "").split(",") if acc.images else []
-    images = [i for i in images if i]
+    images = parse_images(acc.images)
     kb = account_detail_menu(acc.id, callback_data.page)
     if images:
-        # Photos can't be edited in from a text list → new message (allowed).
-        await callback.message.answer_photo(
-            images[0], caption=_detail_text(acc), reply_markup=kb
+        # Albums can't carry inline buttons, so the gallery goes out first and the
+        # action buttons follow in a separate message.
+        await send_album(
+            bot, callback.message.chat.id, images, caption=_detail_text(acc)
         )
-        for img in images[1:5]:
-            await callback.message.answer_photo(img)
+        await callback.message.answer("👇 برای خرید این اکانت:", reply_markup=kb)
     else:
         await edit_or_answer(callback.message, _detail_text(acc), reply_markup=kb)
     await callback.answer()
@@ -115,17 +121,15 @@ async def buy_account(
     order = await services.account.create_purchase_order(db_user.id, account)
     await services.commit()
 
-    await state.set_state(AccountPurchaseFlow.awaiting_receipt)
     await state.update_data(order_id=order.id, account_id=account.id)
-    await edit_or_answer(
-        callback.message,
-        f"✅ اکانت #{account.id} برای شما رزرو شد.\n\n"
-        f"💳 مبلغ <b>{format_toman(account.price)}</b> را به کارت زیر واریز کنید:\n"
-        f"<code>{settings.card_number}</code>\nبه نام: <b>{settings.card_holder}</b>\n\n"
-        f"سپس تصویر رسید را ارسال کنید. 📸",
-        reply_markup=cancel_only(),
+    await prompt_payment_method(
+        callback,
+        state,
+        order_id=order.id,
+        amount=account.price,
+        receipt_state=AccountPurchaseFlow.awaiting_receipt,
+        prefix=f"✅ اکانت #{account.id} برای شما رزرو شد.\n\n",
     )
-    await callback.answer()
 
 
 @router.message(AccountPurchaseFlow.awaiting_receipt, F.photo)
@@ -147,10 +151,13 @@ async def account_receipt(
         reply_markup=main_menu(db_user.is_admin),
     )
     notifier = NotificationService(bot)
+    method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
     caption = (
         f"🆕 <b>خرید اکانت</b>\nسفارش: #{order.id}\n"
         f"اکانت: #{data['account_id']}\n"
-        f"کاربر: <code>{db_user.telegram_id}</code>\nمبلغ: {format_toman(order.amount)}"
+        f"کاربر: {user_ref(db_user)}\n"
+        f"روش پرداخت: {method_fa}\n"
+        f"مبلغ: {format_toman(order.amount)}"
     )
     try:
         await bot.send_photo(
@@ -161,7 +168,7 @@ async def account_receipt(
         await notifier.notify_admin(caption, reply_markup=admin_order_review(order.id))
     await notifier.log_event(
         "خرید اکانت",
-        {"سفارش": f"#{order.id}", "اکانت": f"#{data['account_id']}", "کاربر": str(db_user.telegram_id)},
+        {"سفارش": f"#{order.id}", "اکانت": f"#{data['account_id']}", "کاربر": user_ref(db_user)},
     )
     await state.clear()
 

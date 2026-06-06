@@ -43,3 +43,12 @@ class AdminCB(CallbackData, prefix="adm"):
 class TicketCB(CallbackData, prefix="tk"):
     action: str  # view | reply | close
     ticket_id: int = 0
+
+
+class PayMethodCB(CallbackData, prefix="pay"):
+    method: str  # online | card_to_card
+
+
+class AdminSaleCB(CallbackData, prefix="asale"):
+    action: str  # buy | list
+    account_id: int

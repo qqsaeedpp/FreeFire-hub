@@ -23,10 +23,17 @@ class OrderType(str, enum.Enum):
 
 
 class AccountStatus(str, enum.Enum):
+    PENDING_REVIEW = "pending_review"  # user-listed, awaiting an admin decision
     AVAILABLE = "available"
     RESERVED = "reserved"
     SOLD = "sold"
+    SOLD_TO_ADMIN = "sold_to_admin"    # admin bought it directly from the seller
     HIDDEN = "hidden"
+
+
+class PaymentMethod(str, enum.Enum):
+    ONLINE = "online"
+    CARD_TO_CARD = "card_to_card"
 
 
 class SaleRequestStatus(str, enum.Enum):
@@ -79,4 +86,18 @@ TICKET_STATUS_FA: dict[str, str] = {
     TicketStatus.OPEN: "باز",
     TicketStatus.ANSWERED: "پاسخ داده شده",
     TicketStatus.CLOSED: "بسته شده",
+}
+
+PAYMENT_METHOD_FA: dict[str, str] = {
+    PaymentMethod.ONLINE: "💳 پرداخت آنلاین",
+    PaymentMethod.CARD_TO_CARD: "🏦 کارت به کارت",
+}
+
+ACCOUNT_STATUS_FA: dict[str, str] = {
+    AccountStatus.PENDING_REVIEW: "در انتظار بررسی",
+    AccountStatus.AVAILABLE: "موجود در فروشگاه",
+    AccountStatus.RESERVED: "رزرو شده",
+    AccountStatus.SOLD: "فروخته شده",
+    AccountStatus.SOLD_TO_ADMIN: "خریداری‌شده توسط ادمین",
+    AccountStatus.HIDDEN: "مخفی",
 }

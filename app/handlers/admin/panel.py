@@ -15,7 +15,7 @@ from app.keyboards.reply import BTN_ADMIN
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import WalletAdjustFlow
-from app.utils.helpers import edit_or_answer, format_toman
+from app.utils.helpers import edit_or_answer, format_toman, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="admin_panel")
@@ -111,6 +111,7 @@ async def wallet_adjust_user(
     await state.update_data(user_id=user.id, telegram_id=tg_id)
     await state.set_state(WalletAdjustFlow.entering_amount)
     await message.answer(
+        f"کاربر: {user_ref(user)}\n\n"
         "مبلغ تغییر را وارد کنید (مثبت=افزایش، منفی=کاهش). مثال: 50000 یا -20000"
     )
 

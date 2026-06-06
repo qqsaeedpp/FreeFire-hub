@@ -35,6 +35,12 @@ class ThrottlingMiddleware(BaseMiddleware):
         if tg_user is None or isinstance(inner, CallbackQuery):
             return await handler(event, data)
 
+        # Photo uploads — especially albums, which Telegram delivers as a burst of
+        # separate messages sharing a media_group_id — must never be throttled, or
+        # only the first image of a multi-photo listing would survive.
+        if isinstance(inner, Message) and (inner.photo or inner.media_group_id):
+            return await handler(event, data)
+
         key = f"throttle:{tg_user.id}"
         # SET NX with px = window; if it already exists -> throttled.
         allowed = await redis_client.set(

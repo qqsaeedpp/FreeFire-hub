@@ -21,13 +21,18 @@ class Account(Base):
     gun_skins_count: Mapped[int] = mapped_column(Integer, default=0)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     images: Mapped[str | None] = mapped_column(Text, nullable=True)  # CSV of file_ids
+    special_items: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[AccountStatus] = mapped_column(
         Enum(AccountStatus), default=AccountStatus.AVAILABLE, index=True
     )
-    # encrypted credentials, populated/delivered after a confirmed purchase
+    # encrypted login credentials, delivered after a confirmed purchase
     credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # encrypted "save"/recovery info supplied with the listing
+    save_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     reserved_by_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # set when a regular user listed the account (None for shop/admin listings)
+    seller_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
 
 
 class AccountSaleRequest(Base):
