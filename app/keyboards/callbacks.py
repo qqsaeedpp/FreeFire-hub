@@ -67,8 +67,9 @@ class TutorialCB(CallbackData, prefix="tut"):
 
 
 class ButtonCB(CallbackData, prefix="btn"):
-    action: str  # view | edit_text | edit_emoji | reset | list
+    action: str  # view | edit_text | edit_emoji | color | set_color | toggle | premium | clear_premium | reset | list
     key: str = ""
+    value: str = ""  # color token (primary|success|danger|none) for set_color
 
 
 class AdminCardCB(CallbackData, prefix="acard"):

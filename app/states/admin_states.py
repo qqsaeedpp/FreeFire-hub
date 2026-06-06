@@ -72,7 +72,8 @@ class TutorialMediaFlow(StatesGroup):
 
 
 class ButtonEditFlow(StatesGroup):
-    """Capture a new text or emoji for an admin-editable main button."""
+    """Capture a new text / emoji / premium-emoji for an editable main button."""
 
     entering_text = State()
     entering_emoji = State()
+    entering_premium_emoji = State()
