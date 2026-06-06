@@ -35,7 +35,8 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="👛 تنظیم موجودی کاربر", callback_data=AdminCB(action="wallet_adjust"))
     kb.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
     kb.button(text="📝 مدیریت متن‌های ربات", callback_data=AdminCB(action="texts"))
-    kb.adjust(2, 2, 2, 2, 2, 2)
+    kb.button(text="🎥 مدیریت ویدیوهای آموزشی", callback_data=AdminCB(action="tutorials"))
+    kb.adjust(2, 2, 2, 2, 2, 2, 1)
     return kb.as_markup()
 
 

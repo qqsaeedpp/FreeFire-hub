@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import BotCommand
 
 from app.core.config import settings
 from app.core.logger import configure_logging, get_logger
@@ -51,6 +52,9 @@ async def main() -> None:
 
     scheduler = setup_scheduler()
     scheduler.start()
+
+    # Bot command menu — only «/start».
+    await bot.set_my_commands([BotCommand(command="start", description="شروع")])
 
     notifier = NotificationService(bot)
     me = await bot.me()

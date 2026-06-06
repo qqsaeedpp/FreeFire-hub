@@ -9,12 +9,14 @@ from aiogram.types import CallbackQuery, Message
 from app.container import Services
 from app.core.config import settings
 from app.core.constants import PAYMENT_METHOD_FA
-from app.keyboards.callbacks import DiamondCB, NavCB
+from app.keyboards.callbacks import DiamondCB, NavCB, TutorialCB
 from app.keyboards.inline import (
+    backup_code_menu,
     cancel_only,
     diamond_method_menu,
     diamond_plans_menu,
 )
+from app.services.tutorial_service import GOOGLE_BACKUP_CODE_VIDEO
 from app.keyboards.reply import BTN_BUY_DIAMOND, main_menu
 from app.models.user import User
 from app.handlers.user.discount import prompt_discount
@@ -148,9 +150,41 @@ async def acc_gmail_password(message: Message, state: FSMContext) -> None:
     await state.update_data(gmail_password=message.text.strip())
     await state.set_state(DiamondAccountFlow.entering_backup)
     await message.answer(
-        "🧩 کد بکاپ را ارسال کنید (اگر ندارید بنویسید «ندارم»):",
-        reply_markup=cancel_only(),
+        "🧩 کد بکاپ را ارسال کنید (اگر ندارید بنویسید «ندارم»):\n"
+        "برای آموزش گرفتن کد بکاپ گوگل، دکمه زیر را بزنید 👇",
+        reply_markup=backup_code_menu(GOOGLE_BACKUP_CODE_VIDEO),
     )
+
+
+@router.callback_query(
+    TutorialCB.filter(F.action == "watch"),
+    StateFilter(DiamondAccountFlow.entering_backup),
+)
+async def watch_backup_tutorial(
+    callback: CallbackQuery, callback_data: TutorialCB, services: Services
+) -> None:
+    """Send the tutorial video; the user stays in the backup-code step."""
+    file_id = await services.tutorial.get_file_id(callback_data.key)
+    if file_id:
+        try:
+            await callback.message.answer_video(
+                file_id, caption="🎥 آموزش گرفتن Backup Code گوگل"
+            )
+        except Exception:  # noqa: BLE001 - file_id may be stale
+            await callback.answer(
+                "ارسال ویدیو ناموفق بود. لطفاً بعداً تلاش کنید.", show_alert=True
+            )
+            return
+        await callback.message.answer(
+            "🧩 پس از تماشای آموزش، کد بکاپ را ارسال کنید (اگر ندارید بنویسید «ندارم»):",
+            reply_markup=backup_code_menu(callback_data.key),
+        )
+        await callback.answer()
+    else:
+        await callback.answer(
+            "هنوز ویدیوی آموزشی ثبت نشده است. لطفاً با پشتیبانی در ارتباط باشید.",
+            show_alert=True,
+        )
 
 
 def _optional(text: str) -> str:

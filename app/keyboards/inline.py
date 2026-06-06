@@ -16,6 +16,7 @@ from app.keyboards.callbacks import (
     NavCB,
     PayMethodCB,
     TicketCB,
+    TutorialCB,
 )
 from app.services.diamond_service import DiamondPlan
 from app.utils.helpers import format_toman
@@ -32,6 +33,18 @@ def back_cancel(target: str = "main") -> InlineKeyboardMarkup:
 def cancel_only() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    return kb.as_markup()
+
+
+def backup_code_menu(tutorial_key: str) -> InlineKeyboardMarkup:
+    """Backup-code prompt keyboard: a tutorial-video button above cancel."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="🎥 آموزش گرفتن Backup Code گوگل",
+        callback_data=TutorialCB(action="watch", key=tutorial_key),
+    )
+    kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.adjust(1)
     return kb.as_markup()
 
 
@@ -232,7 +245,8 @@ def pending_order_actions(order_id: int, page: int) -> InlineKeyboardMarkup:
     kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page))
     kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page))
     kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page))
-    kb.adjust(2, 1, 1)
+    kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page))
+    kb.adjust(2, 1, 1, 1)
     return kb.as_markup()
 
 

@@ -14,7 +14,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.container import Services
 from app.filters.admin import IsAdmin
-from app.keyboards.callbacks import AdminCB, AdminSaleCB
+from app.keyboards.callbacks import AdminCB, AdminSaleCB, NavCB
 from app.keyboards.inline import cancel_only
 from app.services.notification_service import NotificationService
 from app.states.admin_states import EditDiamondPrice
@@ -93,34 +93,59 @@ async def sale_list(
 
 
 # ============================ DIAMOND PRICES ============================
-@router.callback_query(AdminCB.filter(F.action == "diamond_prices"), IsAdmin())
-async def diamond_prices(callback: CallbackQuery, services: Services) -> None:
-    plans = await services.diamond.list_plans()
+def _diamond_prices_kb(plans) -> InlineKeyboardBuilder:
     kb = InlineKeyboardBuilder()
     for p in plans:
         kb.button(
             text=f"{p.name} — {format_toman(p.price)}",
             callback_data=AdminCB(action="edit_plan", value=p.code),
         )
+    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="back_home"))
     kb.adjust(1)
+    return kb
+
+
+def _diamond_price_edit_kb() -> InlineKeyboardBuilder:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="diamond_prices"))
+    kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.adjust(2)
+    return kb
+
+
+async def _show_diamond_prices(message, services: Services) -> None:
+    plans = await services.diamond.list_plans()
     await edit_or_answer(
-        callback.message,
+        message,
         "💎 برای تغییر قیمت، پلن موردنظر را انتخاب کنید:",
-        reply_markup=kb.as_markup(),
+        reply_markup=_diamond_prices_kb(plans).as_markup(),
     )
+
+
+@router.callback_query(AdminCB.filter(F.action == "diamond_prices"), IsAdmin())
+async def diamond_prices(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    await state.clear()
+    await _show_diamond_prices(callback.message, services)
     await callback.answer()
 
 
 @router.callback_query(AdminCB.filter(F.action == "edit_plan"), IsAdmin())
 async def edit_plan(
-    callback: CallbackQuery, callback_data: AdminCB, state: FSMContext
+    callback: CallbackQuery, callback_data: AdminCB, services: Services, state: FSMContext
 ) -> None:
+    plan = await services.diamond.get_plan(callback_data.value)
+    if plan is None:
+        await callback.answer("پلن یافت نشد.", show_alert=True)
+        return
     await state.set_state(EditDiamondPrice.entering_price)
     await state.update_data(plan_code=callback_data.value)
     await edit_or_answer(
         callback.message,
-        f"قیمت جدید برای پلن <code>{callback_data.value}</code> را وارد کنید (تومان):",
-        reply_markup=cancel_only(),
+        f"💎 پلن: <b>{plan.name}</b>\nقیمت فعلی: {format_toman(plan.price)}\n\n"
+        f"قیمت جدید را وارد کنید (تومان):",
+        reply_markup=_diamond_price_edit_kb().as_markup(),
     )
     await callback.answer()
 
@@ -135,5 +160,13 @@ async def save_plan_price(
         return
     data = await state.get_data()
     ok = await services.diamond.set_plan_price(data["plan_code"], price)
-    await message.answer("✅ قیمت به‌روزرسانی شد." if ok else "پلن یافت نشد.")
+    await services.commit()
     await state.clear()
+    if ok:
+        plans = await services.diamond.list_plans()
+        await message.answer(
+            "✅ قیمت به‌روزرسانی شد.\n\n💎 لیست پلن‌ها:",
+            reply_markup=_diamond_prices_kb(plans).as_markup(),
+        )
+    else:
+        await message.answer("پلن یافت نشد.")

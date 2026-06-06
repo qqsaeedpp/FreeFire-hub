@@ -61,6 +61,11 @@ class BotTextCB(CallbackData, prefix="btxt"):
     key: str = ""
 
 
+class TutorialCB(CallbackData, prefix="tut"):
+    action: str  # view | edit | clear | list (admin) | watch (user)
+    key: str = ""
+
+
 class AdminCardCB(CallbackData, prefix="acard"):
     purpose: str  # diamond | account
 

@@ -63,3 +63,9 @@ class BotTextEditFlow(StatesGroup):
     """Capture a replacement for an admin-editable bot text (with entities)."""
 
     entering_text = State()
+
+
+class TutorialMediaFlow(StatesGroup):
+    """Capture a replacement video for an admin-managed tutorial."""
+
+    awaiting_video = State()

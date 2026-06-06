@@ -21,6 +21,7 @@ from app.repositories.orders import OrderRepository
 from app.repositories.payments import PaymentRepository
 from app.repositories.referrals import ReferralRepository
 from app.repositories.tickets import TicketRepository
+from app.repositories.tutorial_media import TutorialMediaRepository
 from app.repositories.users import UserRepository
 from app.repositories.wallets import WalletRepository
 from app.services.account_service import AccountService
@@ -31,6 +32,7 @@ from app.services.order_service import OrderService
 from app.services.referral_service import ReferralService
 from app.services.text_service import TextService
 from app.services.ticket_service import TicketService
+from app.services.tutorial_service import TutorialService
 from app.services.user_service import UserService
 from app.services.wallet_service import WalletService
 
@@ -52,6 +54,7 @@ class Services:
         self.cards_repo = PaymentCardRepository(session)
         self.discounts_repo = DiscountCodeRepository(session)
         self.bot_texts_repo = BotTextRepository(session)
+        self.tutorial_repo = TutorialMediaRepository(session)
 
         # services
         self.wallet = WalletService(self.wallets_repo)
@@ -69,6 +72,7 @@ class Services:
         self.card = CardService(self.cards_repo)
         self.discount = DiscountService(self.discounts_repo)
         self.text = TextService(self.bot_texts_repo)
+        self.tutorial = TutorialService(self.tutorial_repo)
 
     async def commit(self) -> None:
         await self.session.commit()

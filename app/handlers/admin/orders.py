@@ -26,47 +26,43 @@ router = Router(name="admin_orders")
 _PENDING_PAGE_SIZE = 10
 
 
-async def _show_pending(message, services: Services, page: int) -> None:
+async def _pending_list_content(services: Services, page: int):
+    """Compute (text, markup) for the pending-orders list with a smart page clamp."""
     total = await services.orders.count_by_status(OrderStatus.UNDER_REVIEW)
-    offset, total_pages = paginate_meta(total, page, _PENDING_PAGE_SIZE)
+    total_pages = max(1, (total + _PENDING_PAGE_SIZE - 1) // _PENDING_PAGE_SIZE)
+    page = max(1, min(page, total_pages))  # smart-clamp when a page empties out
     if total == 0:
-        await edit_or_answer(message, "سفارشی در انتظار بررسی نیست.")
-        return
+        return "✅ سفارشی در انتظار بررسی نیست.", pending_orders_menu([], 1, 1)
+    offset = (page - 1) * _PENDING_PAGE_SIZE
     orders = await services.orders.list_by_status(
         OrderStatus.UNDER_REVIEW, offset=offset, limit=_PENDING_PAGE_SIZE
     )
-    await edit_or_answer(
-        message,
-        f"🧾 <b>سفارش‌های در انتظار بررسی</b> ({total} سفارش)\nیکی را انتخاب کنید:",
-        reply_markup=pending_orders_menu(orders, page, total_pages),
+    text = (
+        f"🧾 <b>سفارش‌های در انتظار بررسی</b> ({total} سفارش)\nیکی را انتخاب کنید:"
     )
+    return text, pending_orders_menu(orders, page, total_pages)
 
 
-@router.callback_query(AdminCB.filter(F.action == "pending_orders"), IsAdmin())
-async def pending_orders(callback: CallbackQuery, services: Services) -> None:
-    await _show_pending(callback.message, services, page=1)
-    await callback.answer()
+async def _show_pending(message, services: Services, page: int) -> None:
+    text, markup = await _pending_list_content(services, page)
+    await edit_or_answer(message, text, reply_markup=markup)
 
 
-@router.callback_query(AdminOrderCB.filter(F.action == "page"), IsAdmin())
-async def pending_page(
-    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services
-) -> None:
-    await _show_pending(callback.message, services, page=callback_data.page)
-    await callback.answer()
+async def _delete_pending_receipt(bot, chat_id: int, state: FSMContext) -> None:
+    """Remove the separate receipt-photo message sent for an opened order."""
+    data = await state.get_data()
+    mid = data.get("pending_receipt_msg_id")
+    if mid:
+        try:
+            await bot.delete_message(chat_id, mid)
+        except Exception:  # noqa: BLE001 - already gone / too old to delete
+            pass
+        await state.update_data(pending_receipt_msg_id=None)
 
 
-@router.callback_query(AdminOrderCB.filter(F.action == "open"), IsAdmin())
-async def open_order(
-    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services
-) -> None:
-    order = await services.order.get(callback_data.order_id)
-    if order is None:
-        await callback.answer("سفارش یافت نشد.", show_alert=True)
-        return
-    user = await services.users.get(order.user_id)
+def _order_caption(order, user) -> str:
     method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
-    caption = (
+    return (
         f"🧾 <b>سفارش #{order.id}</b>\n"
         f"نوع: {order.order_type}\n"
         f"کاربر: {user_ref(user)}\n"
@@ -74,16 +70,58 @@ async def open_order(
         f"مبلغ: {format_toman(order.amount)}\n"
         f"وضعیت: {ORDER_STATUS_FA.get(order.status, order.status)}"
     )
-    payment = await services.payments.get_by_order_id(order.id)
+
+
+@router.callback_query(AdminCB.filter(F.action == "pending_orders"), IsAdmin())
+async def pending_orders(
+    callback: CallbackQuery, services: Services, state: FSMContext, bot
+) -> None:
+    await _delete_pending_receipt(bot, callback.message.chat.id, state)
+    await _show_pending(callback.message, services, page=1)
+    await callback.answer()
+
+
+@router.callback_query(AdminOrderCB.filter(F.action == "page"), IsAdmin())
+async def pending_page(
+    callback: CallbackQuery,
+    callback_data: AdminOrderCB,
+    services: Services,
+    state: FSMContext,
+    bot,
+) -> None:
+    await _delete_pending_receipt(bot, callback.message.chat.id, state)
+    await _show_pending(callback.message, services, page=callback_data.page)
+    await callback.answer()
+
+
+@router.callback_query(AdminOrderCB.filter(F.action == "open"), IsAdmin())
+async def open_order(
+    callback: CallbackQuery,
+    callback_data: AdminOrderCB,
+    services: Services,
+    state: FSMContext,
+    bot,
+) -> None:
+    order = await services.order.get(callback_data.order_id)
+    if order is None:
+        await callback.answer("سفارش یافت نشد.", show_alert=True)
+        return
+    # Drop a previously-opened order's receipt photo before opening this one.
+    await _delete_pending_receipt(bot, callback.message.chat.id, state)
+    user = await services.users.get(order.user_id)
+    caption = _order_caption(order, user)
     actions = pending_order_actions(order.id, callback_data.page)
+    # The list message is edited in place into the order detail (so it can later
+    # be refreshed in place); the receipt photo is sent as a separate message.
+    await edit_or_answer(callback.message, caption, reply_markup=actions)
+    payment = await services.payments.get_by_order_id(order.id)
     if payment and payment.receipt_file_id:
-        await callback.message.answer_photo(
-            payment.receipt_file_id, caption=caption, reply_markup=actions
+        sent = await callback.message.answer_photo(
+            payment.receipt_file_id, caption=f"🧾 فیش واریزی سفارش #{order.id}"
         )
+        await state.update_data(pending_receipt_msg_id=sent.message_id)
     else:
-        await callback.message.answer(
-            caption + "\n\n(رسیدی ثبت نشده — پرداخت از کیف پول)", reply_markup=actions
-        )
+        await state.update_data(pending_receipt_msg_id=None)
     await callback.answer()
 
 
@@ -130,7 +168,11 @@ async def order_details(
 
 @router.callback_query(AdminOrderCB.filter(F.action == "approve"), IsAdmin())
 async def approve(
-    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services, bot
+    callback: CallbackQuery,
+    callback_data: AdminOrderCB,
+    services: Services,
+    state: FSMContext,
+    bot,
 ) -> None:
     order = await services.order.get(callback_data.order_id)
     if order is None:
@@ -145,12 +187,22 @@ async def approve(
             f"✅ سفارش #{order.id} شما تایید شد و در حال آماده‌سازی است.",
         )
     await callback.answer("تایید شد.")
-    await _refresh(callback, order.id)
+    # Pending detail (text) → refresh the live list in place; the processed
+    # order drops out at once. Notification card (photo) → keep its caption.
+    if callback.message.photo is None:
+        await _delete_pending_receipt(bot, callback.message.chat.id, state)
+        await _show_pending(callback.message, services, page=callback_data.page)
+    else:
+        await _refresh(callback, order.id)
 
 
 @router.callback_query(AdminOrderCB.filter(F.action == "complete"), IsAdmin())
 async def complete(
-    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services, bot
+    callback: CallbackQuery,
+    callback_data: AdminOrderCB,
+    services: Services,
+    state: FSMContext,
+    bot,
 ) -> None:
     order = await services.order.get(callback_data.order_id)
     if order is None:
@@ -188,7 +240,11 @@ async def complete(
         "سفارش تکمیل شد", {"سفارش": f"#{order.id}", "مبلغ": format_toman(order.amount)}
     )
     await callback.answer("سفارش تکمیل شد.")
-    await _refresh(callback, order.id, completed=True)
+    if callback.message.photo is None:
+        await _delete_pending_receipt(bot, callback.message.chat.id, state)
+        await _show_pending(callback.message, services, page=callback_data.page)
+    else:
+        await _refresh(callback, order.id, completed=True)
 
 
 @router.callback_query(AdminOrderCB.filter(F.action == "reject"), IsAdmin())
@@ -196,7 +252,23 @@ async def reject_start(
     callback: CallbackQuery, callback_data: AdminOrderCB, state: FSMContext
 ) -> None:
     await state.set_state(RejectReasonFlow.entering_reason)
-    await state.update_data(order_id=callback_data.order_id)
+    # Remember where the reject came from so the reason step can refresh the
+    # live pending list in place. A photo message is the notification card; a
+    # text message is the in-place pending detail.
+    if callback.message.photo is None:
+        await state.update_data(
+            order_id=callback_data.order_id,
+            reject_list_chat_id=callback.message.chat.id,
+            reject_list_msg_id=callback.message.message_id,
+            reject_list_page=callback_data.page,
+        )
+    else:
+        await state.update_data(
+            order_id=callback_data.order_id,
+            reject_list_chat_id=None,
+            reject_list_msg_id=None,
+            reject_list_page=callback_data.page,
+        )
     await callback.message.answer(
         f"دلیل رد سفارش #{callback_data.order_id} را بنویسید (یا «-» برای بدون دلیل):"
     )
@@ -234,6 +306,25 @@ async def reject_finish(
             + (f"\nدلیل: {reason}" if reason else ""),
         )
     await message.answer("سفارش رد شد.")
+
+    # If the reject started from the in-place pending detail, refresh that
+    # same list message so the rejected order drops out immediately.
+    list_chat_id = data.get("reject_list_chat_id")
+    list_msg_id = data.get("reject_list_msg_id")
+    if list_chat_id and list_msg_id:
+        await _delete_pending_receipt(bot, list_chat_id, state)
+        text, markup = await _pending_list_content(
+            services, data.get("reject_list_page", 1)
+        )
+        try:
+            await bot.edit_message_text(
+                text,
+                chat_id=list_chat_id,
+                message_id=list_msg_id,
+                reply_markup=markup,
+            )
+        except Exception:  # noqa: BLE001 - message gone / not modified
+            pass
     await state.clear()
 
 

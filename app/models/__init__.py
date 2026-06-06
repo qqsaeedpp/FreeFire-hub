@@ -8,6 +8,7 @@ from app.models.payment import Payment
 from app.models.payment_card import PaymentCard
 from app.models.referral import Referral
 from app.models.ticket import Ticket, TicketMessage
+from app.models.tutorial_media import TutorialMedia
 from app.models.user import User
 from app.models.wallet import Wallet, WalletTransaction
 
@@ -28,5 +29,6 @@ __all__ = [
     "PaymentCard",
     "DiscountCode",
     "BotText",
+    "TutorialMedia",
     "AdminLog",
 ]
