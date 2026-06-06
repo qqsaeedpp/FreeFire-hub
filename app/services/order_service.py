@@ -16,6 +16,10 @@ class OrderService:
     async def set_payment_method(self, order: Order, method: PaymentMethod) -> None:
         order.payment_method = method
 
+    async def update_amount(self, order: Order, amount: int) -> None:
+        """Overwrite the order total (e.g. after a discount code is applied)."""
+        order.amount = amount
+
     async def attach_receipt(self, order: Order, receipt_file_id: str) -> Payment:
         payment = await self.payments.get_by_order_id(order.id)
         if payment is None:

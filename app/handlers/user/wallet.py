@@ -7,7 +7,12 @@ from aiogram.types import Message
 
 from app.container import Services
 from app.core.config import settings
-from app.core.constants import PAYMENT_METHOD_FA, PaymentMethod, TransactionType
+from app.core.constants import (
+    PAYMENT_METHOD_FA,
+    CardPurpose,
+    PaymentMethod,
+    TransactionType,
+)
 from app.handlers.user.payment import prompt_payment_method
 from app.keyboards.inline import cancel_only
 from app.keyboards.reply import BTN_WALLET, main_menu
@@ -70,6 +75,7 @@ async def topup_amount(message: Message, state: FSMContext) -> None:
         order_id=None,
         amount=amount,
         receipt_state=WalletFlow.awaiting_topup_receipt,
+        purpose=CardPurpose.DIAMOND,
     )
 
 

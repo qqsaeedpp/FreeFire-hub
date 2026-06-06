@@ -3,9 +3,17 @@ from __future__ import annotations
 
 from sqlalchemy import and_, func, select
 
-from app.core.constants import AccountStatus, SaleRequestStatus
+from app.core.constants import SHOP_VISIBLE_STATUSES, AccountStatus, SaleRequestStatus
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
 from app.repositories.base import BaseRepository
+
+# Statuses an admin can act on in the sale-account management panel.
+_MANAGEABLE_STATUSES = (
+    AccountStatus.AVAILABLE,
+    AccountStatus.LISTED_FOR_SALE,
+    AccountStatus.RESERVED,
+    AccountStatus.HIDDEN,
+)
 
 
 class AccountRepository(BaseRepository[Account]):
@@ -20,7 +28,7 @@ class AccountRepository(BaseRepository[Account]):
         max_price: int | None = None,
         query: str | None = None,
     ) -> list[Account]:
-        conditions = [Account.status == AccountStatus.AVAILABLE]
+        conditions = [Account.status.in_(SHOP_VISIBLE_STATUSES)]
         if min_price is not None:
             conditions.append(Account.price >= min_price)
         if max_price is not None:
@@ -43,7 +51,7 @@ class AccountRepository(BaseRepository[Account]):
         max_price: int | None = None,
         query: str | None = None,
     ) -> int:
-        conditions = [Account.status == AccountStatus.AVAILABLE]
+        conditions = [Account.status.in_(SHOP_VISIBLE_STATUSES)]
         if min_price is not None:
             conditions.append(Account.price >= min_price)
         if max_price is not None:
@@ -52,6 +60,26 @@ class AccountRepository(BaseRepository[Account]):
             conditions.append(Account.title.ilike(f"%{query}%"))
         result = await self.session.execute(
             select(func.count()).select_from(Account).where(and_(*conditions))
+        )
+        return int(result.scalar_one())
+
+    async def list_manageable(
+        self, *, offset: int = 0, limit: int = 5
+    ) -> list[Account]:
+        result = await self.session.execute(
+            select(Account)
+            .where(Account.status.in_(_MANAGEABLE_STATUSES))
+            .order_by(Account.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_manageable(self) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Account)
+            .where(Account.status.in_(_MANAGEABLE_STATUSES))
         )
         return int(result.scalar_one())
 

@@ -1,8 +1,10 @@
 """SQLAlchemy ORM models."""
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
 from app.models.admin_log import AdminLog
+from app.models.discount import DiscountCode
 from app.models.order import AccountOrder, DiamondOrder, Order
 from app.models.payment import Payment
+from app.models.payment_card import PaymentCard
 from app.models.referral import Referral
 from app.models.ticket import Ticket, TicketMessage
 from app.models.user import User
@@ -22,5 +24,7 @@ __all__ = [
     "Ticket",
     "TicketMessage",
     "Payment",
+    "PaymentCard",
+    "DiscountCode",
     "AdminLog",
 ]

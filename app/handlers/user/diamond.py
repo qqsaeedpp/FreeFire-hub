@@ -18,7 +18,7 @@ from app.keyboards.inline import (
 )
 from app.keyboards.reply import BTN_BUY_DIAMOND, main_menu
 from app.models.user import User
-from app.handlers.user.payment import prompt_payment_method
+from app.handlers.user.discount import prompt_discount
 from app.services.notification_service import NotificationService
 from app.states.user_states import DiamondAccountFlow, DiamondUIDFlow
 from app.utils.helpers import edit_or_answer, format_toman, user_ref
@@ -93,11 +93,11 @@ async def uid_received(
     order = await services.diamond.create_uid_order(db_user.id, plan, uid)
     await services.commit()
     await state.update_data(order_id=order.id, uid=uid)
-    await prompt_payment_method(
+    await prompt_discount(
         message,
         state,
         order_id=order.id,
-        amount=plan.price,
+        base_amount=plan.price,
         receipt_state=DiamondUIDFlow.awaiting_receipt,
     )
 
@@ -181,11 +181,11 @@ async def acc_login_method(
     )
     await services.commit()
     await state.update_data(order_id=order.id)
-    await prompt_payment_method(
+    await prompt_discount(
         callback,
         state,
         order_id=order.id,
-        amount=plan.price,
+        base_amount=plan.price,
         receipt_state=DiamondAccountFlow.awaiting_receipt,
         prefix="اطلاعات ثبت شد. ✅\n\n",
     )

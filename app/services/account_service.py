@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.core.config import settings
-from app.core.constants import AccountStatus, OrderType
+from app.core.constants import SHOP_VISIBLE_STATUSES, AccountStatus, OrderType
 from app.core.security import decrypt, encrypt
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
 from app.models.order import AccountOrder
@@ -64,13 +64,40 @@ class AccountService:
         account.status = AccountStatus.SOLD_TO_ADMIN
 
     async def publish_listing(self, account: Account) -> None:
-        """Admin pushes a user-listed account into the public shop."""
+        """Admin pushes a user-listed account into the public shop.
+
+        A user listing the admin chooses to publish enters the shop with the
+        dedicated ``LISTED_FOR_SALE`` status (admin-added listings use
+        ``AVAILABLE``); both are visible to buyers.
+        """
+        account.status = AccountStatus.LISTED_FOR_SALE
+
+    # ---- admin sale-account management ----
+    async def list_manageable(self, *, page: int, page_size: int):
+        offset = (page - 1) * page_size
+        items = await self.accounts.list_manageable(offset=offset, limit=page_size)
+        total = await self.accounts.count_manageable()
+        return items, total
+
+    async def hide(self, account: Account) -> None:
+        account.status = AccountStatus.HIDDEN
+        account.reserved_by_id = None
+
+    async def unhide(self, account: Account) -> None:
+        """Bring a hidden account back into the shop."""
         account.status = AccountStatus.AVAILABLE
+
+    async def remove(self, account: Account) -> None:
+        await self.accounts.delete(account)
+
+    async def update_fields(self, account: Account, **fields) -> None:
+        for key, value in fields.items():
+            setattr(account, key, value)
 
     # ---- purchase flow ----
     async def reserve(self, account_id: int, buyer_user_id: int) -> Account:
         account = await self.accounts.get(account_id)
-        if account is None or account.status != AccountStatus.AVAILABLE:
+        if account is None or account.status not in SHOP_VISIBLE_STATUSES:
             raise AccountReservationError
         account.status = AccountStatus.RESERVED
         account.reserved_by_id = buyer_user_id

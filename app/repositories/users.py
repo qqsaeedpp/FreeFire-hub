@@ -43,3 +43,12 @@ class UserRepository(BaseRepository[User]):
             select(func.count()).select_from(User).where(User.is_active.is_(True))
         )
         return int(result.scalar_one())
+
+    async def list_active(self) -> list[User]:
+        """Every non-banned, active user — used for the lottery draw."""
+        result = await self.session.execute(
+            select(User).where(
+                User.is_active.is_(True), User.is_banned.is_(False)
+            )
+        )
+        return list(result.scalars().all())

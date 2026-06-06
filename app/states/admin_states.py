@@ -25,3 +25,26 @@ class WalletAdjustFlow(StatesGroup):
 
 class RejectReasonFlow(StatesGroup):
     entering_reason = State()
+
+
+class CardFlow(StatesGroup):
+    """Set the card-to-card destination for a sales channel."""
+
+    entering_number = State()
+    entering_holder = State()
+
+
+class DiscountCreateFlow(StatesGroup):
+    entering_code = State()
+    entering_percent = State()
+    entering_max_uses = State()
+    entering_days = State()
+
+
+class LotteryFlow(StatesGroup):
+    entering_winner_count = State()
+
+
+class AccountEditFlow(StatesGroup):
+    entering_price = State()
+    entering_title = State()

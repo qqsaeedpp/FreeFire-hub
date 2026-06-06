@@ -42,6 +42,13 @@ class AccountFormFlow(StatesGroup):
     special_items = State()
 
 
+class DiscountFlow(StatesGroup):
+    """Optional 'do you have a discount code?' step before diamond payment."""
+
+    deciding = State()
+    entering_code = State()
+
+
 class PaymentFlow(StatesGroup):
     """Generic 'choose a payment method' step inserted before payment details."""
 

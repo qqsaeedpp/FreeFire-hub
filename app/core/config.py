@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # One id, or several comma-separated ids ("123" or "123,456").
     admin_id_raw: str = Field(..., alias="ADMIN_ID")
     log_chat_id: int = Field(..., alias="LOG_CHAT_ID")
+    # Channel where lottery results are announced; defaults to the log channel.
+    lottery_channel_id_raw: int | None = Field(None, alias="LOTTERY_CHANNEL_ID")
+
+    @property
+    def lottery_channel_id(self) -> int:
+        return self.lottery_channel_id_raw or self.log_chat_id
 
     @cached_property
     def admin_ids(self) -> list[int]:

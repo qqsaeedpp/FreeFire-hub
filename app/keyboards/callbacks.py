@@ -52,3 +52,17 @@ class PayMethodCB(CallbackData, prefix="pay"):
 class AdminSaleCB(CallbackData, prefix="asale"):
     action: str  # buy | list
     account_id: int
+
+
+class DiscountCB(CallbackData, prefix="disc"):
+    action: str  # have | skip
+
+
+class AdminCardCB(CallbackData, prefix="acard"):
+    purpose: str  # diamond | account
+
+
+class AdminAccountCB(CallbackData, prefix="amgr"):
+    action: str  # page | view | hide | unhide | delete | confirm_delete | edit_price | edit_title
+    account_id: int = 0
+    page: int = 1

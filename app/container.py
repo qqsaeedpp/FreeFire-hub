@@ -14,6 +14,8 @@ from app.repositories.accounts import (
     AccountSaleRequestRepository,
     RequestedAccountRepository,
 )
+from app.repositories.cards import PaymentCardRepository
+from app.repositories.discounts import DiscountCodeRepository
 from app.repositories.orders import OrderRepository
 from app.repositories.payments import PaymentRepository
 from app.repositories.referrals import ReferralRepository
@@ -21,7 +23,9 @@ from app.repositories.tickets import TicketRepository
 from app.repositories.users import UserRepository
 from app.repositories.wallets import WalletRepository
 from app.services.account_service import AccountService
+from app.services.card_service import CardService
 from app.services.diamond_service import DiamondService
+from app.services.discount_service import DiscountService
 from app.services.order_service import OrderService
 from app.services.referral_service import ReferralService
 from app.services.ticket_service import TicketService
@@ -43,6 +47,8 @@ class Services:
         self.wallets_repo = WalletRepository(session)
         self.tickets_repo = TicketRepository(session)
         self.referrals_repo = ReferralRepository(session)
+        self.cards_repo = PaymentCardRepository(session)
+        self.discounts_repo = DiscountCodeRepository(session)
 
         # services
         self.wallet = WalletService(self.wallets_repo)
@@ -57,6 +63,8 @@ class Services:
         )
         self.order = OrderService(self.orders, self.payments)
         self.ticket = TicketService(self.tickets_repo)
+        self.card = CardService(self.cards_repo)
+        self.discount = DiscountService(self.discounts_repo)
 
     async def commit(self) -> None:
         await self.session.commit()
