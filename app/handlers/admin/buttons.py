@@ -62,7 +62,7 @@ def _color_picker_kb(key: str):
             text=STYLE_LABELS[style],
             callback_data=ButtonCB(action="set_color", key=key, value=style),
         )
-    kb.button(text="⚪️ بدون رنگ (پیش‌فرض)", callback_data=ButtonCB(action="set_color", key=key, value="none"))
+    kb.button(text="⚪️ بدون رنگ", callback_data=ButtonCB(action="set_color", key=key, value="none"))
     kb.button(text="🔙 بازگشت", callback_data=ButtonCB(action="view", key=key))
     kb.adjust(1)
     return kb.as_markup()
@@ -258,7 +258,7 @@ async def button_premium_start(
     await callback.answer()
 
 
-@router.message(ButtonEditFlow.entering_premium_emoji, F.text, IsAdmin())
+@router.message(ButtonEditFlow.entering_premium_emoji, IsAdmin())
 async def button_premium_save(
     message: Message, services: Services, state: FSMContext
 ) -> None:
@@ -268,18 +268,27 @@ async def button_premium_save(
         await state.clear()
         await message.answer("خطا: کلید دکمه یافت نشد.")
         return
-    # Extract the custom_emoji_id from the message entities.
+    # A premium emoji can arrive in the message text or in a media caption, so
+    # inspect both entity lists. The matching slice of text/caption is kept as a
+    # human-readable placeholder (``emoji_text``).
+    source = message.text or message.caption or ""
+    entities = list(message.entities or []) + list(message.caption_entities or [])
     custom_emoji_id = None
-    for ent in message.entities or []:
+    emoji_text = source.strip()
+    for ent in entities:
         if ent.type == "custom_emoji" and ent.custom_emoji_id:
             custom_emoji_id = ent.custom_emoji_id
+            emoji_text = source[ent.offset : ent.offset + ent.length] or emoji_text
             break
     if not custom_emoji_id:
         await message.answer(
-            "❌ ایموجی پرمیوم یافت نشد. لطفاً یک ایموجی پرمیوم (Custom Emoji) ارسال کنید."
+            "❌ ایموجی پرمیوم یافت نشد.\n\n"
+            "لطفاً یک <b>ایموجی پرمیوم</b> (Custom Emoji) ارسال کنید — همان ایموجی‌های "
+            "متحرک/ویژه‌ای که فقط با اشتراک تلگرام پرمیوم قابل ارسال‌اند. "
+            "ایموجی معمولی پذیرفته نمی‌شود (برای ایموجی معمولی از «😀 تغییر ایموجی» استفاده کنید)."
         )
         return
-    await services.button.set_premium_emoji(key, custom_emoji_id, message.text.strip())
+    await services.button.set_premium_emoji(key, custom_emoji_id, emoji_text or None)
     await services.commit()
     await state.clear()
     label = BUTTON_LABELS.get(key, key)

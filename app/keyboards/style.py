@@ -27,9 +27,9 @@ VALID_STYLES = (STYLE_PRIMARY, STYLE_SUCCESS, STYLE_DANGER)
 
 # Persian labels + colored dot for the admin appearance picker.
 STYLE_LABELS: dict[str, str] = {
-    STYLE_PRIMARY: "🔵 آبی (Primary)",
-    STYLE_SUCCESS: "🟢 سبز (Success)",
-    STYLE_DANGER: "🔴 قرمز (Danger)",
+    STYLE_PRIMARY: "🔵 آبی",
+    STYLE_SUCCESS: "🟢 سبز",
+    STYLE_DANGER: "🔴 قرمز",
 }
 
 STYLE_DOT: dict[str, str] = {
