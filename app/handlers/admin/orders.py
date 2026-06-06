@@ -15,29 +15,74 @@ from app.core.constants import (
 from app.core.security import decrypt
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminOrderCB
-from app.keyboards.inline import admin_order_review
+from app.keyboards.inline import pending_order_actions, pending_orders_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import RejectReasonFlow
-from app.utils.helpers import format_toman, user_ref
+from app.utils.helpers import edit_or_answer, format_toman, paginate_meta, user_ref
 
 router = Router(name="admin_orders")
+
+_PENDING_PAGE_SIZE = 10
+
+
+async def _show_pending(message, services: Services, page: int) -> None:
+    total = await services.orders.count_by_status(OrderStatus.UNDER_REVIEW)
+    offset, total_pages = paginate_meta(total, page, _PENDING_PAGE_SIZE)
+    if total == 0:
+        await edit_or_answer(message, "سفارشی در انتظار بررسی نیست.")
+        return
+    orders = await services.orders.list_by_status(
+        OrderStatus.UNDER_REVIEW, offset=offset, limit=_PENDING_PAGE_SIZE
+    )
+    await edit_or_answer(
+        message,
+        f"🧾 <b>سفارش‌های در انتظار بررسی</b> ({total} سفارش)\nیکی را انتخاب کنید:",
+        reply_markup=pending_orders_menu(orders, page, total_pages),
+    )
 
 
 @router.callback_query(AdminCB.filter(F.action == "pending_orders"), IsAdmin())
 async def pending_orders(callback: CallbackQuery, services: Services) -> None:
-    orders = await services.orders.list_by_status(OrderStatus.UNDER_REVIEW, limit=10)
-    if not orders:
-        await callback.answer("سفارشی در انتظار بررسی نیست.", show_alert=True)
+    await _show_pending(callback.message, services, page=1)
+    await callback.answer()
+
+
+@router.callback_query(AdminOrderCB.filter(F.action == "page"), IsAdmin())
+async def pending_page(
+    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services
+) -> None:
+    await _show_pending(callback.message, services, page=callback_data.page)
+    await callback.answer()
+
+
+@router.callback_query(AdminOrderCB.filter(F.action == "open"), IsAdmin())
+async def open_order(
+    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services
+) -> None:
+    order = await services.order.get(callback_data.order_id)
+    if order is None:
+        await callback.answer("سفارش یافت نشد.", show_alert=True)
         return
-    for o in orders:
-        user = await services.users.get(o.user_id)
-        method_fa = PAYMENT_METHOD_FA.get(o.payment_method, "-")
+    user = await services.users.get(order.user_id)
+    method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
+    caption = (
+        f"🧾 <b>سفارش #{order.id}</b>\n"
+        f"نوع: {order.order_type}\n"
+        f"کاربر: {user_ref(user)}\n"
+        f"روش پرداخت: {method_fa}\n"
+        f"مبلغ: {format_toman(order.amount)}\n"
+        f"وضعیت: {ORDER_STATUS_FA.get(order.status, order.status)}"
+    )
+    payment = await services.payments.get_by_order_id(order.id)
+    actions = pending_order_actions(order.id, callback_data.page)
+    if payment and payment.receipt_file_id:
+        await callback.message.answer_photo(
+            payment.receipt_file_id, caption=caption, reply_markup=actions
+        )
+    else:
         await callback.message.answer(
-            f"🧾 سفارش #{o.id}\nنوع: {o.order_type}\nکاربر: {user_ref(user)}\n"
-            f"روش پرداخت: {method_fa}\n"
-            f"مبلغ: {format_toman(o.amount)}\nوضعیت: {ORDER_STATUS_FA.get(o.status, o.status)}",
-            reply_markup=admin_order_review(o.id),
+            caption + "\n\n(رسیدی ثبت نشده — پرداخت از کیف پول)", reply_markup=actions
         )
     await callback.answer()
 
@@ -70,14 +115,9 @@ async def order_details(
                     return decrypt(value) if value else "-"
 
                 lines += [
-                    f"🔐 روش ورود: {diamond.login_method.value if diamond.login_method else '-'}",
                     f"📧 ایمیل اکانت: <code>{dec(diamond.account_email)}</code>",
-                    f"🔑 رمز اکانت: <code>{dec(diamond.account_password)}</code>",
-                    f"🧩 کد بکاپ: <code>{dec(diamond.backup_code)}</code>",
-                    f"📧 جیمیل: <code>{dec(diamond.gmail)}</code>",
                     f"🔑 رمز جیمیل: <code>{dec(diamond.gmail_password)}</code>",
-                    f"🧩 بکاپ جیمیل: <code>{dec(diamond.gmail_backup_code)}</code>",
-                    f"🧷 بکاپ اکانت: <code>{dec(diamond.account_backup_code)}</code>",
+                    f"🧩 کد بکاپ: <code>{dec(diamond.backup_code)}</code>",
                 ]
     elif order.order_type == OrderType.ACCOUNT_PURCHASE:
         acc_order = await services.orders.get_account_order(order.id)

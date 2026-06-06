@@ -24,6 +24,7 @@ from app.states.user_states import AccountPurchaseFlow
 from app.utils.helpers import (
     edit_or_answer,
     format_toman,
+    is_admin_user,
     paginate_meta,
     parse_images,
     send_album,
@@ -148,7 +149,7 @@ async def account_receipt(
 
     await message.answer(
         f"✅ رسید دریافت شد. سفارش #{order.id} در حال بررسی است.",
-        reply_markup=main_menu(db_user.is_admin),
+        reply_markup=main_menu(is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")

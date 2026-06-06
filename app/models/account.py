@@ -71,6 +71,7 @@ class RequestedAccount(Base):
 
     deposit_paid: Mapped[bool] = mapped_column(default=False)
     deposit_amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    deposit_receipt_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[SaleRequestStatus] = mapped_column(
         Enum(SaleRequestStatus), default=SaleRequestStatus.PENDING, index=True
     )

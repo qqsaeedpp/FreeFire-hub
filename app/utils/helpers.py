@@ -53,6 +53,17 @@ async def answer_managed(
         await message.answer(text, reply_markup=reply_markup)
 
 
+def is_admin_user(message: Message, db_user) -> bool:
+    """Whether the sender is an admin — true if their Telegram id is in the
+    configured allowlist OR their DB record carries the admin flag. Used so the
+    «پنل مدیریت» button never disappears for an admin, regardless of DB state.
+    """
+    from app.core.config import settings
+
+    tg_id = message.from_user.id if message.from_user else None
+    return (tg_id in settings.admin_ids) or bool(db_user and db_user.is_admin)
+
+
 def user_ref(user) -> str:
     """Render a user as ``<code>telegram_id</code> | @username`` for display.
 

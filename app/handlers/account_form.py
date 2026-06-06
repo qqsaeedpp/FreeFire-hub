@@ -24,7 +24,14 @@ from app.keyboards.reply import BTN_SELL_ACCOUNT, main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import AccountFormFlow
-from app.utils.helpers import edit_or_answer, format_toman, parse_images, send_album, user_ref
+from app.utils.helpers import (
+    edit_or_answer,
+    format_toman,
+    is_admin_user,
+    parse_images,
+    send_album,
+    user_ref,
+)
 from app.utils.validators import parse_price
 
 router = Router(name="account_form")
@@ -193,7 +200,7 @@ async def step_special_items(
 
     await message.answer(
         f"✅ اکانت شما با شماره #{account.id} ثبت شد و برای بررسی به پشتیبانی ارسال شد.",
-        reply_markup=main_menu(db_user.is_admin),
+        reply_markup=main_menu(is_admin_user(message, db_user)),
     )
     await _notify_admin_new_listing(bot, account, db_user)
 

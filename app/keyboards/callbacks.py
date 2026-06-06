@@ -25,13 +25,10 @@ class NavCB(CallbackData, prefix="nav"):
     page: int = 1
 
 
-class LoginMethodCB(CallbackData, prefix="login"):
-    method: str
-
-
 class AdminOrderCB(CallbackData, prefix="aord"):
-    action: str  # approve | reject | complete | view
-    order_id: int
+    action: str  # approve | reject | complete | details | open | page
+    order_id: int = 0
+    page: int = 1
 
 
 class AdminCB(CallbackData, prefix="adm"):
@@ -71,4 +68,10 @@ class AdminCardCB(CallbackData, prefix="acard"):
 class AdminAccountCB(CallbackData, prefix="amgr"):
     action: str  # page | view | hide | unhide | delete | confirm_delete | edit_price | edit_title
     account_id: int = 0
+    page: int = 1
+
+
+class AdminRequestedCB(CallbackData, prefix="areq"):
+    action: str  # approve_deposit | reject_deposit | page | view | delete | confirm_delete
+    req_id: int = 0
     page: int = 1

@@ -4,15 +4,15 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.core.constants import LoginMethod
 from app.keyboards.callbacks import (
     AccountCB,
     AdminAccountCB,
+    AdminCB,
     AdminOrderCB,
+    AdminRequestedCB,
     AdminSaleCB,
     DiamondCB,
     DiscountCB,
-    LoginMethodCB,
     NavCB,
     PayMethodCB,
     TicketCB,
@@ -57,23 +57,6 @@ def diamond_plans_menu(plans: list[DiamondPlan]) -> InlineKeyboardMarkup:
     kb.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target="diamond_method"))
     kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
     kb.adjust(1)
-    return kb.as_markup()
-
-
-def login_method_menu() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    labels = {
-        LoginMethod.GUEST: "👤 مهمان",
-        LoginMethod.FACEBOOK: "📘 فیسبوک",
-        LoginMethod.GOOGLE: "🔴 گوگل",
-        LoginMethod.VK: "🔵 VK",
-        LoginMethod.TWITTER: "🐦 توییتر",
-        LoginMethod.APPLE: "🍎 اپل",
-    }
-    for method, label in labels.items():
-        kb.button(text=label, callback_data=LoginMethodCB(method=method.value))
-    kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
-    kb.adjust(2)
     return kb.as_markup()
 
 
@@ -171,6 +154,10 @@ def manage_accounts_menu(accounts, page: int, total_pages: int) -> InlineKeyboar
     if page < total_pages:
         nav.button(text="بعدی ➡️", callback_data=AdminAccountCB(action="page", page=page + 1))
     kb.attach(nav)
+
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    kb.attach(tail)
     return kb.as_markup()
 
 
@@ -213,6 +200,98 @@ def admin_order_review(order_id: int) -> InlineKeyboardMarkup:
         text="👁 جزئیات سفارش", callback_data=AdminOrderCB(action="details", order_id=order_id)
     )
     kb.adjust(2, 1, 1)
+    return kb.as_markup()
+
+
+def pending_orders_menu(orders, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for o in orders:
+        kb.button(
+            text=f"#{o.id} | {format_toman(o.amount)}",
+            callback_data=AdminOrderCB(action="open", order_id=o.id, page=page),
+        )
+    kb.adjust(1)
+
+    nav = InlineKeyboardBuilder()
+    if page > 1:
+        nav.button(text="⬅️ قبلی", callback_data=AdminOrderCB(action="page", page=page - 1))
+    nav.button(text=f"{page}/{total_pages}", callback_data=NavCB(action="noop"))
+    if page < total_pages:
+        nav.button(text="بعدی ➡️", callback_data=AdminOrderCB(action="page", page=page + 1))
+    kb.attach(nav)
+
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def pending_order_actions(order_id: int, page: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ تایید", callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page))
+    kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page))
+    kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page))
+    kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page))
+    kb.adjust(2, 1, 1)
+    return kb.as_markup()
+
+
+def requested_deposit_review(req_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="✅ تایید بیعانه",
+        callback_data=AdminRequestedCB(action="approve_deposit", req_id=req_id),
+    )
+    kb.button(
+        text="❌ رد بیعانه",
+        callback_data=AdminRequestedCB(action="reject_deposit", req_id=req_id),
+    )
+    kb.adjust(2)
+    return kb.as_markup()
+
+
+def requested_accounts_menu(items, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for req in items:
+        kb.button(
+            text=f"#{req.id} | {format_toman(req.target_price)}",
+            callback_data=AdminRequestedCB(action="view", req_id=req.id, page=page),
+        )
+    kb.adjust(1)
+
+    nav = InlineKeyboardBuilder()
+    if page > 1:
+        nav.button(text="⬅️ قبلی", callback_data=AdminRequestedCB(action="page", page=page - 1))
+    nav.button(text=f"{page}/{total_pages}", callback_data=NavCB(action="noop"))
+    if page < total_pages:
+        nav.button(text="بعدی ➡️", callback_data=AdminRequestedCB(action="page", page=page + 1))
+    kb.attach(nav)
+
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def requested_account_detail_menu(req_id: int, page: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🗑 حذف", callback_data=AdminRequestedCB(action="delete", req_id=req_id, page=page))
+    kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminRequestedCB(action="page", page=page))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def requested_account_delete_confirm(req_id: int, page: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="✅ بله، حذف شود",
+        callback_data=AdminRequestedCB(action="confirm_delete", req_id=req_id, page=page),
+    )
+    kb.button(
+        text="❌ انصراف",
+        callback_data=AdminRequestedCB(action="view", req_id=req_id, page=page),
+    )
+    kb.adjust(1)
     return kb.as_markup()
 
 

@@ -16,7 +16,7 @@ from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import AdminReplyFlow
 from app.states.user_states import TicketFlow
-from app.utils.helpers import user_ref
+from app.utils.helpers import is_admin_user, user_ref
 
 router = Router(name="support_tickets")
 
@@ -66,7 +66,7 @@ async def ticket_message(
     await services.commit()
     await message.answer(
         f"✅ تیکت شما با شماره #{ticket.id} ثبت شد. پشتیبانی به‌زودی پاسخ می‌دهد.",
-        reply_markup=main_menu(db_user.is_admin),
+        reply_markup=main_menu(is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     await notifier.notify_admin(

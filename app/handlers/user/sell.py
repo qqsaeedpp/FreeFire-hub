@@ -11,12 +11,12 @@ from aiogram.types import Message
 
 from app.container import Services
 from app.core.config import settings
-from app.keyboards.inline import cancel_only
+from app.keyboards.inline import cancel_only, requested_deposit_review
 from app.keyboards.reply import BTN_REQUEST_ACCOUNT, main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import RequestedAccountFlow
-from app.utils.helpers import format_toman, user_ref
+from app.utils.helpers import format_toman, is_admin_user, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="user_sell")
@@ -86,6 +86,7 @@ async def req_deposit(
     message: Message, services: Services, state: FSMContext, db_user: User, bot
 ) -> None:
     data = await state.get_data()
+    file_id = message.photo[-1].file_id
     req = await services.account.create_requested_account(
         db_user.id,
         target_price=data["price"],
@@ -94,12 +95,12 @@ async def req_deposit(
         guns=data["guns"],
         description=data["description"],
         deposit_paid=True,
+        deposit_receipt_file_id=file_id,
     )
     await services.commit()
-    file_id = message.photo[-1].file_id
     await message.answer(
         f"✅ درخواست اکانت شما با شماره #{req.id} ثبت شد و در حال بررسی است.",
-        reply_markup=main_menu(db_user.is_admin),
+        reply_markup=main_menu(is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     caption = (
@@ -108,12 +109,16 @@ async def req_deposit(
         f"قیمت مدنظر: {format_toman(data['price'])}\n"
         f"الیت: {data['elite']} | ست: {data['sets']} | گان: {data['guns']}\n"
         f"توضیحات: {data['description']}\n"
-        f"بیعانه: {format_toman(settings.requested_account_deposit)} (پرداخت شد)"
+        f"بیعانه: {format_toman(settings.requested_account_deposit)} (پرداخت شد)\n\n"
+        f"فیش بیعانه را بررسی و تایید کنید تا به لیست «اکانت‌های درخواستی» اضافه شود."
     )
+    review_kb = requested_deposit_review(req.id)
     try:
-        await bot.send_photo(settings.admin_id, file_id, caption=caption)
+        await bot.send_photo(
+            settings.admin_id, file_id, caption=caption, reply_markup=review_kb
+        )
     except Exception:  # noqa: BLE001
-        await notifier.notify_admin(caption)
+        await notifier.notify_admin(caption, reply_markup=review_kb)
     await notifier.log_event(
         "اکانت درخواستی", {"درخواست": f"#{req.id}", "کاربر": user_ref(db_user)}
     )

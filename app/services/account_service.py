@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 from app.core.config import settings
-from app.core.constants import SHOP_VISIBLE_STATUSES, AccountStatus, OrderType
+from app.core.constants import (
+    SHOP_VISIBLE_STATUSES,
+    AccountStatus,
+    OrderType,
+    SaleRequestStatus,
+)
 from app.core.security import decrypt, encrypt
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
 from app.models.order import AccountOrder
@@ -146,3 +151,25 @@ class AccountService:
             **fields,
         )
         return await self.requested.add(req)
+
+    async def get_requested(self, req_id: int) -> RequestedAccount | None:
+        return await self.requested.get(req_id)
+
+    async def list_requested(self, *, status: SaleRequestStatus, page: int, page_size: int):
+        offset = (page - 1) * page_size
+        items = await self.requested.list_by_status(
+            status, offset=offset, limit=page_size
+        )
+        total = await self.requested.count_by_status(status)
+        return items, total
+
+    async def approve_requested_deposit(self, req: RequestedAccount) -> None:
+        """Confirm the deposit receipt; the request enters the admin work list."""
+        req.deposit_paid = True
+        req.status = SaleRequestStatus.APPROVED
+
+    async def reject_requested_deposit(self, req: RequestedAccount) -> None:
+        req.status = SaleRequestStatus.REJECTED
+
+    async def delete_requested(self, req: RequestedAccount) -> None:
+        await self.requested.delete(req)

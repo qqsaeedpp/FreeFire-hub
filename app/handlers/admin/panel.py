@@ -27,6 +27,7 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="🧾 سفارش‌های در انتظار", callback_data=AdminCB(action="pending_orders"))
     kb.button(text="➕ افزودن اکانت", callback_data=AdminCB(action="add_account"))
     kb.button(text="🗂 مدیریت اکانت‌های فروش", callback_data=AdminCB(action="manage_accounts"))
+    kb.button(text="📝 اکانت‌های درخواستی", callback_data=AdminCB(action="requested_accounts"))
     kb.button(text="💎 قیمت جم", callback_data=AdminCB(action="diamond_prices"))
     kb.button(text="💳 مدیریت کارت‌ها", callback_data=AdminCB(action="cards"))
     kb.button(text="🎟 کدهای تخفیف", callback_data=AdminCB(action="discounts"))
@@ -34,7 +35,7 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="👛 تنظیم موجودی کاربر", callback_data=AdminCB(action="wallet_adjust"))
     kb.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
     kb.button(text="📝 مدیریت متن‌های ربات", callback_data=AdminCB(action="texts"))
-    kb.adjust(2, 2, 2, 2, 2, 1)
+    kb.adjust(2, 2, 2, 2, 2, 2)
     return kb.as_markup()
 
 

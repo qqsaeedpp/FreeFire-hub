@@ -19,7 +19,7 @@ from app.keyboards.reply import BTN_WALLET, main_menu
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import WalletFlow
-from app.utils.helpers import format_toman, user_ref
+from app.utils.helpers import format_toman, is_admin_user, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="user_wallet")
@@ -91,7 +91,7 @@ async def topup_receipt(
     file_id = message.photo[-1].file_id
     await message.answer(
         "✅ رسید شارژ کیف پول دریافت شد و پس از تایید پشتیبانی به موجودی شما اضافه می‌شود.",
-        reply_markup=main_menu(db_user.is_admin),
+        reply_markup=main_menu(is_admin_user(message, db_user)),
     )
     notifier = NotificationService(bot)
     from aiogram.utils.keyboard import InlineKeyboardBuilder

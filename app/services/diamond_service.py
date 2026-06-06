@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 
 from redis.asyncio import Redis
 
-from app.core.constants import LoginMethod, OrderType
+from app.core.constants import OrderType
 from app.models.order import DiamondOrder
 from app.repositories.orders import OrderRepository
 
@@ -91,14 +91,14 @@ class DiamondService:
         plan: DiamondPlan,
         *,
         email: str,
-        password: str,
-        backup_code: str | None,
-        login_method: LoginMethod,
-        gmail: str | None = None,
         gmail_password: str | None = None,
-        gmail_backup_code: str | None = None,
-        account_backup_code: str | None = None,
+        backup_code: str | None = None,
     ) -> DiamondOrder:
+        """Create a diamond order paid with account credentials.
+
+        Only three details are collected from the user (each exactly once):
+        account email, gmail password and backup code — all stored encrypted.
+        """
         from app.core.security import encrypt
 
         def enc(value: str | None) -> str | None:
@@ -110,13 +110,8 @@ class DiamondService:
             amount=plan.price,
             plan_name=plan.name,
             diamonds=plan.diamonds,
-            account_email=encrypt(email),
-            account_password=encrypt(password),
-            backup_code=encrypt(backup_code or ""),
-            gmail=enc(gmail),
+            account_email=enc(email),
             gmail_password=enc(gmail_password),
-            gmail_backup_code=enc(gmail_backup_code),
-            account_backup_code=enc(account_backup_code),
-            login_method=login_method,
+            backup_code=enc(backup_code),
         )
         return await self.orders.add(order)

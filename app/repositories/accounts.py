@@ -112,3 +112,23 @@ class RequestedAccountRepository(BaseRepository[RequestedAccount]):
             .order_by(RequestedAccount.id.desc())
         )
         return list(result.scalars().all())
+
+    async def list_by_status(
+        self, status: SaleRequestStatus, *, offset: int = 0, limit: int = 10
+    ):
+        result = await self.session.execute(
+            select(RequestedAccount)
+            .where(RequestedAccount.status == status)
+            .order_by(RequestedAccount.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_by_status(self, status: SaleRequestStatus) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(RequestedAccount)
+            .where(RequestedAccount.status == status)
+        )
+        return int(result.scalar_one())

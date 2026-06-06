@@ -12,14 +12,9 @@ class DiamondUIDFlow(StatesGroup):
 
 class DiamondAccountFlow(StatesGroup):
     choosing_plan = State()
-    entering_email = State()
-    entering_password = State()
-    entering_backup = State()
-    entering_gmail = State()
-    entering_gmail_password = State()
-    entering_gmail_backup = State()
-    entering_account_backup = State()
-    choosing_login_method = State()
+    entering_email = State()          # ایمیل اکانت
+    entering_gmail_password = State()  # رمز عبور جیمیل
+    entering_backup = State()          # کد بکاپ
     awaiting_receipt = State()
 
 
