@@ -15,7 +15,7 @@ from app.filters.buttons import MainBtn
 from app.services.button_service import BTN_KEY_ADMIN
 from app.models.user import User
 from app.services.notification_service import NotificationService
-from app.states.admin_states import WalletAdjustFlow
+from app.states.admin_states import EditReferralReward, WalletAdjustFlow
 from app.utils.helpers import edit_or_answer, format_toman, user_ref
 from app.utils.validators import parse_price
 
@@ -34,11 +34,12 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="🎟 کدهای تخفیف", callback_data=AdminCB(action="discounts"))
     kb.button(text="🎁 قرعه‌کشی", callback_data=AdminCB(action="lottery"))
     kb.button(text="👛 تنظیم موجودی کاربر", callback_data=AdminCB(action="wallet_adjust"))
+    kb.button(text="🎁 پاداش زیرمجموعه‌گیری", callback_data=AdminCB(action="referral_reward"))
     kb.button(text="📣 پیام همگانی", callback_data=AdminCB(action="broadcast"))
     kb.button(text="📝 مدیریت متن‌های ربات", callback_data=AdminCB(action="texts"))
     kb.button(text="🎥 مدیریت ویدیوهای آموزشی", callback_data=AdminCB(action="tutorials"))
     kb.button(text="🎨 مدیریت دکمه‌ها", callback_data=AdminCB(action="buttons"))
-    kb.adjust(2, 2, 2, 2, 2, 2, 2, 1)
+    kb.adjust(2, 2, 2, 2, 2, 2, 2, 2)
     return kb.as_markup()
 
 
@@ -133,6 +134,39 @@ async def wallet_adjust_user(
     await message.answer(
         f"کاربر: {user_ref(user)}\n\n"
         "مبلغ تغییر را وارد کنید (مثبت=افزایش، منفی=کاهش). مثال: 50000 یا -20000"
+    )
+
+
+# ---- referral reward flow ----
+@router.callback_query(AdminCB.filter(F.action == "referral_reward"), IsAdmin())
+async def referral_reward_start(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    current = await services.referral.get_reward()
+    await state.set_state(EditReferralReward.entering_amount)
+    await edit_or_answer(
+        callback.message,
+        f"🎁 <b>پاداش زیرمجموعه‌گیری</b>\n"
+        f"مبلغ فعلی: {format_toman(current)}\n\n"
+        f"مبلغ جدید پاداش هر دعوت را وارد کنید (تومان):",
+        reply_markup=cancel_only(),
+    )
+    await callback.answer()
+
+
+@router.message(EditReferralReward.entering_amount, F.text, IsAdmin())
+async def referral_reward_save(
+    message: Message, services: Services, state: FSMContext
+) -> None:
+    amount = parse_price(message.text)
+    if amount is None or amount < 0:
+        await message.answer("مبلغ نامعتبر است. یک عدد معتبر وارد کنید.")
+        return
+    await services.referral.set_reward(amount)
+    await state.clear()
+    await message.answer(
+        f"✅ پاداش زیرمجموعه‌گیری به {format_toman(amount)} تغییر یافت.",
+        reply_markup=admin_menu(),
     )
 
 

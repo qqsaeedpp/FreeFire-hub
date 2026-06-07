@@ -62,7 +62,9 @@ class Services:
         # services
         self.wallet = WalletService(self.wallets_repo)
         self.user = UserService(self.users, self.referrals_repo)
-        self.referral = ReferralService(self.referrals_repo, self.wallet, self.users)
+        self.referral = ReferralService(
+            self.referrals_repo, self.wallet, self.users, redis_client
+        )
         self.diamond = DiamondService(redis_client, self.orders)
         self.account = AccountService(
             self.accounts_repo,

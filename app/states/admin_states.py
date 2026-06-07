@@ -9,6 +9,10 @@ class EditDiamondPrice(StatesGroup):
     entering_price = State()
 
 
+class EditReferralReward(StatesGroup):
+    entering_amount = State()
+
+
 class BroadcastFlow(StatesGroup):
     entering_message = State()
     confirming = State()

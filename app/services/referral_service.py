@@ -1,12 +1,18 @@
 """Referral service — rewards a referrer once their invitee makes a first purchase."""
 from __future__ import annotations
 
+from redis.asyncio import Redis
+
 from app.core.config import settings
 from app.core.constants import TransactionType
 from app.models.referral import Referral
 from app.models.user import User
 from app.repositories.referrals import ReferralRepository
 from app.services.wallet_service import WalletService
+
+# Admin-editable referral reward (Toman). Stored in Redis so it can be changed
+# live from the admin panel; falls back to the REFERRAL_REWARD env default.
+_REWARD_KEY = "referral:reward"
 
 
 class ReferralResult:
@@ -22,10 +28,27 @@ class ReferralService:
         referrals: ReferralRepository,
         wallets: WalletService,
         users_repo,
+        redis: Redis | None = None,
     ) -> None:
         self.referrals = referrals
         self.wallets = wallets
         self.users = users_repo
+        self.redis = redis
+
+    async def get_reward(self) -> int:
+        """Current referral reward — admin-editable value or the env default."""
+        if self.redis is not None:
+            raw = await self.redis.get(_REWARD_KEY)
+            if raw is not None:
+                try:
+                    return int(raw)
+                except (TypeError, ValueError):
+                    pass
+        return settings.referral_reward
+
+    async def set_reward(self, amount: int) -> None:
+        if self.redis is not None:
+            await self.redis.set(_REWARD_KEY, int(amount))
 
     async def link_and_reward(
         self, new_user: User, referral_code: str
@@ -44,7 +67,7 @@ class ReferralService:
         if await self.referrals.get_by_referred(new_user.id):
             return ReferralResult(False, None, 0)
 
-        amount = settings.referral_reward
+        amount = await self.get_reward()
         new_user.referred_by_id = referrer.id
         await self.referrals.add(
             Referral(
