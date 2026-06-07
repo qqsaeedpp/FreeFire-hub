@@ -78,6 +78,7 @@ async def _show_plans(callback: CallbackQuery, services: Services, category: str
             back_target=back_target,
             emoji=_CAT_EMOJI.get(category, "💎"),
             sizes=_CAT_SIZES.get(category),
+            short_price=category == CAT_ACCOUNT,
         ),
     )
 

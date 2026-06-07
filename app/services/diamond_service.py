@@ -14,9 +14,10 @@ from app.core.constants import OrderType
 from app.models.order import DiamondOrder
 from app.repositories.orders import OrderRepository
 
-# Bumped to v3 to force a one-time reseed of the new catalog (UID + account
-# plans were fully replaced; older cached payloads are obsolete).
-_PLANS_KEY = "diamond:plans:v3"
+# Bumped to v4 to force a one-time reseed: account-plan display names were
+# cleaned up (English labels dropped, "2180 جم" → "2k جم"). Older cached
+# payloads are obsolete.
+_PLANS_KEY = "diamond:plans:v4"
 # Configurable "buy all Level-Up offers at once" price (Toman).
 _LEVELUP_ALL_KEY = "diamond:levelup_all_price"
 DEFAULT_LEVELUP_ALL_PRICE = 750_000
@@ -62,14 +63,14 @@ def _default_plans() -> list[DiamondPlan]:
         DiamondPlan("lvl25", "آفر لول 25", 0, 125_000, CAT_LEVELUP),
         DiamondPlan("lvl30", "آفر لول 30", 0, 175_000, CAT_LEVELUP),
         # ---------------- اطلاعات اکانت ----------------
-        # Order matters: drives the [weekly][monthly] / [weekly lite] / ... layout.
-        DiamondPlan("accw", "weekly (هفتگی)", 0, 299_000, CAT_ACCOUNT),
-        DiamondPlan("accm", "monthly (ماهانه)", 0, 1_790_000, CAT_ACCOUNT),
-        DiamondPlan("accwl", "weekly lite (هفتگی لایت)", 0, 120_000, CAT_ACCOUNT),
-        DiamondPlan("acco1", "offer 1$ (آفر روزانه)", 0, 185_000, CAT_ACCOUNT),
-        DiamondPlan("acco2", "offer 2$ (آفر روزانه)", 0, 370_000, CAT_ACCOUNT),
+        # Order matters: drives the [هفتگی][ماهانه] / [هفتگی لایت] / ... layout.
+        DiamondPlan("accw", "هفتگی", 0, 299_000, CAT_ACCOUNT),
+        DiamondPlan("accm", "ماهانه", 0, 1_790_000, CAT_ACCOUNT),
+        DiamondPlan("accwl", "هفتگی لایت", 0, 120_000, CAT_ACCOUNT),
+        DiamondPlan("acco1", "آفر روزانه ۱ دلاری", 0, 185_000, CAT_ACCOUNT),
+        DiamondPlan("acco2", "آفر روزانه ۲ دلاری", 0, 370_000, CAT_ACCOUNT),
         DiamondPlan("acc520", "520 جم", 520, 850_000, CAT_ACCOUNT),
-        DiamondPlan("acc2180", "2180 جم", 2180, 3_200_000, CAT_ACCOUNT),
+        DiamondPlan("acc2180", "2k جم", 2180, 3_200_000, CAT_ACCOUNT),
         DiamondPlan("acc1060", "1060 جم", 1060, 1_650_000, CAT_ACCOUNT),
         DiamondPlan("acc5600", "5600 جم", 5600, 7_250_000, CAT_ACCOUNT),
     ]

@@ -106,23 +106,33 @@ def diamond_category_menu() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def _short_toman(amount: int) -> str:
+    """Compact money label for tight button rows: ``850,000 ت``."""
+    return f"{amount:,} ت"
+
+
 def diamond_plan_menu(
     plans: list[DiamondPlan],
     *,
     back_target: str,
     emoji: str = "💎",
     sizes: tuple[int, ...] | None = None,
+    short_price: bool = False,
 ) -> InlineKeyboardMarkup:
     """Final step: pick a concrete plan from the given category.
 
     ``sizes`` controls the row layout (buttons-per-row). Pass ``(2,)`` for a
     responsive two-column grid, or an explicit tuple like ``(2, 1, 2, 2, 2)`` to
     pin a precise arrangement. Defaults to one plan per row.
+
+    ``short_price`` renders the price with the compact ``ت`` suffix instead of
+    the full ``تومان`` — useful for the dense two-column account grid.
     """
+    money = _short_toman if short_price else format_toman
     kb = InlineKeyboardBuilder()
     for plan in plans:
         kb.button(
-            text=f"{emoji} {plan.name} — {format_toman(plan.price)}",
+            text=f"{emoji} {plan.name} — {money(plan.price)}",
             callback_data=DiamondCB(action="plan", value=plan.code),
             **style_kwargs(STYLE_PRIMARY),
         )
