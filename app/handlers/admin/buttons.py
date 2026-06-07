@@ -1,15 +1,17 @@
 """Admin: full appearance management for the main reply-keyboard buttons.
 
 Per button the admin can set (all DB-backed, no code change needed):
-* text & emoji (item 5);
+* text;
+* emoji — a single unified flow: send a NORMAL emoji and it's shown normally,
+  send a PREMIUM (custom) emoji and it's stored as ``icon_custom_emoji_id``
+  (Bot API 9.4) and shown as premium; send «حذف» to remove the current emoji.
+  Setting one kind clears the other, and there is a dedicated «حذف ایموجی» action;
 * color — 🔵 primary / 🟢 success / 🔴 danger (Bot API 9.4 ``style``);
-* enabled/disabled (a disabled button is hidden from the main menu);
-* a premium (custom) emoji shown before the label (Bot API 9.4
-  ``icon_custom_emoji_id``) — captured from a message the admin sends.
+* enabled/disabled (a disabled button is hidden from the main menu).
 
-Premium emoji on buttons only renders for users if the bot's owner has Telegram
-Premium (or the bot purchased a username on Fragment); otherwise Telegram keeps
-the regular emoji. The setting is stored regardless.
+A premium emoji is validated with ``Bot.get_custom_emoji_stickers`` before saving.
+It only renders for users if the bot's owner has Telegram Premium (or the bot
+purchased a username on Fragment).
 """
 from __future__ import annotations
 
@@ -40,16 +42,14 @@ def _buttons_list_kb():
     return kb.as_markup()
 
 
-def _button_detail_kb(key: str, *, is_enabled: bool, has_premium: bool):
+def _button_detail_kb(key: str, *, is_enabled: bool):
     kb = InlineKeyboardBuilder()
     kb.button(text="✏️ تغییر متن", callback_data=ButtonCB(action="edit_text", key=key))
     kb.button(text="😀 تغییر ایموجی", callback_data=ButtonCB(action="edit_emoji", key=key))
     kb.button(text="🎨 رنگ دکمه", callback_data=ButtonCB(action="color", key=key))
     toggle_label = "🚫 غیرفعال‌کردن" if is_enabled else "✅ فعال‌کردن"
     kb.button(text=toggle_label, callback_data=ButtonCB(action="toggle", key=key))
-    kb.button(text="⭐️ ایموجی پرمیوم", callback_data=ButtonCB(action="premium", key=key))
-    if has_premium:
-        kb.button(text="❎ حذف ایموجی پرمیوم", callback_data=ButtonCB(action="clear_premium", key=key))
+    kb.button(text="🧹 حذف ایموجی", callback_data=ButtonCB(action="clear_emoji", key=key))
     kb.button(text="🔄 بازگردانی به پیش‌فرض", callback_data=ButtonCB(action="reset", key=key))
     kb.button(text="🔙 بازگشت", callback_data=ButtonCB(action="list"))
     kb.adjust(2, 2, 1, 1, 1)
@@ -74,13 +74,18 @@ async def _detail_text(services: Services, key: str) -> str:
     ap = await services.button.appearance(key)
     color_fa = STYLE_LABELS.get(ap.style, "⚪️ بدون رنگ (پیش‌فرض)")
     enabled_fa = "✅ فعال" if ap.is_enabled else "🚫 غیرفعال (پنهان)"
-    premium_fa = f"⭐️ {ap.emoji_text or 'دارد'}" if ap.custom_emoji_id else "—"
+    if ap.custom_emoji_id:
+        emoji_fa = f"⭐️ پرمیوم ({ap.emoji_text or 'دارد'})"
+    elif ap.emoji:
+        emoji_fa = f"{ap.emoji} (عادی)"
+    else:
+        emoji_fa = "— (بدون ایموجی)"
     return (
         f"🎨 <b>{label}</b>\n\n"
         f"نمایش فعلی: <b>{ap.label}</b>\n"
+        f"ایموجی: {emoji_fa}\n"
         f"رنگ: {color_fa}\n"
-        f"وضعیت: {enabled_fa}\n"
-        f"ایموجی پرمیوم: {premium_fa}\n\n"
+        f"وضعیت: {enabled_fa}\n\n"
         "یکی از گزینه‌های زیر را انتخاب کنید:"
     )
 
@@ -90,9 +95,7 @@ async def _show_detail(callback: CallbackQuery, services: Services, key: str) ->
     await edit_or_answer(
         callback.message,
         await _detail_text(services, key),
-        reply_markup=_button_detail_kb(
-            key, is_enabled=ap.is_enabled, has_premium=bool(ap.custom_emoji_id)
-        ),
+        reply_markup=_button_detail_kb(key, is_enabled=ap.is_enabled),
     )
 
 
@@ -164,7 +167,7 @@ async def button_edit_text_save(
     )
 
 
-# ----------------------------- EMOJI -----------------------------
+# ----------------------------- EMOJI (normal + premium, unified) -----------------------------
 @router.callback_query(ButtonCB.filter(F.action == "edit_emoji"), IsAdmin())
 async def button_edit_emoji_start(
     callback: CallbackQuery, callback_data: ButtonCB, state: FSMContext
@@ -174,30 +177,99 @@ async def button_edit_emoji_start(
     await state.update_data(button_key=callback_data.key)
     await edit_or_answer(
         callback.message,
-        f"😀 ایموجی جدید دکمه «{label}» را ارسال کنید (فقط یک ایموجی معمولی).",
+        f"😀 برای دکمه «{label}» یک ایموجی بفرستید:\n\n"
+        "• ایموجی <b>عادی</b> ← عادی نمایش داده می‌شود.\n"
+        "• ایموجی <b>پرمیوم</b> (Custom Emoji) ← پرمیوم نمایش داده می‌شود "
+        "(نیازمند اشتراک پرمیوم مالک ربات).\n"
+        "• برای <b>حذف</b> ایموجی فعلی، کلمهٔ «حذف» را بفرستید.",
         reply_markup=cancel_only(),
     )
     await callback.answer()
 
 
-@router.message(ButtonEditFlow.entering_emoji, F.text, IsAdmin())
+@router.message(ButtonEditFlow.entering_emoji, IsAdmin())
 async def button_edit_emoji_save(
-    message: Message, services: Services, state: FSMContext
+    message: Message, services: Services, state: FSMContext, bot: Bot
 ) -> None:
+    """Unified emoji setter: normal OR premium (auto-detected), plus «حذف».
+
+    A premium (custom) emoji is detected via a ``custom_emoji`` entity and stored
+    as ``icon_custom_emoji_id`` (validated first). Anything else is treated as a
+    plain emoji. Setting one kind clears the other so only the chosen emoji shows.
+    """
     data = await state.get_data()
     key = data.get("button_key")
     if not key:
         await state.clear()
         await message.answer("خطا: کلید دکمه یافت نشد.")
         return
-    await services.button.set_emoji(key, message.text.strip())
+    label = BUTTON_LABELS.get(key, key)
+    source = message.text or message.caption or ""
+
+    # «حذف» — remove the current emoji entirely (both normal and premium).
+    if source.strip() == "حذف":
+        await services.button.set_emoji(key, "")
+        await services.button.clear_premium_emoji(key)
+        await services.commit()
+        await state.clear()
+        await message.answer(
+            f"✅ ایموجی دکمه «{label}» حذف شد.\nبرای اعمال، دستور /start را بزنید."
+        )
+        return
+
+    # Detect a premium (custom) emoji in the text or caption entities.
+    entities = list(message.entities or []) + list(message.caption_entities or [])
+    custom_emoji_id = None
+    emoji_text = source.strip()
+    for ent in entities:
+        if ent.type == "custom_emoji" and ent.custom_emoji_id:
+            custom_emoji_id = ent.custom_emoji_id
+            emoji_text = source[ent.offset : ent.offset + ent.length] or emoji_text
+            break
+
+    if custom_emoji_id:
+        # Validate the bot can actually USE this custom emoji before storing it,
+        # otherwise it would never render on the button.
+        try:
+            stickers = await bot.get_custom_emoji_stickers(
+                custom_emoji_ids=[custom_emoji_id]
+            )
+        except TelegramBadRequest:
+            stickers = []
+        if not stickers:
+            await message.answer(
+                "❌ این ایموجی پرمیوم برای ربات قابل استفاده نیست و ذخیره نشد.\n\n"
+                "نمایش ایموجی پرمیوم نیازمند آن است که <b>مالک ربات</b> اشتراک تلگرام "
+                "پرمیوم داشته باشد (یا یوزرنیم ربات از Fragment خریداری شده باشد). "
+                "یک ایموجی دیگر امتحان کنید یا «حذف» را بفرستید."
+            )
+            return
+        # Premium replaces any normal emoji so the button shows only the premium one.
+        await services.button.set_premium_emoji(key, custom_emoji_id, emoji_text or None)
+        await services.button.set_emoji(key, "")
+        await services.commit()
+        await state.clear()
+        await message.answer(
+            f"✅ ایموجی <b>پرمیوم</b> برای دکمه «{label}» تنظیم و اعتبارسنجی شد.\n\n"
+            "برای اعمال در منوی اصلی، دستور /start را بزنید."
+        )
+        return
+
+    # Plain (normal) emoji — replaces any premium emoji.
+    normal = source.strip()
+    if not normal:
+        await message.answer(
+            "❌ ایموجی نامعتبر. یک ایموجی (عادی یا پرمیوم) بفرستید یا «حذف» را ارسال کنید."
+        )
+        return
+    await services.button.set_emoji(key, normal)
+    await services.button.clear_premium_emoji(key)
     await services.commit()
     await state.clear()
-    label = BUTTON_LABELS.get(key, key)
     current = await services.button.label(key)
     await message.answer(
-        f"✅ ایموجی دکمه «{label}» به‌روزرسانی شد.\nنمایش جدید: <b>{current}</b>\n\n"
-        "برای اعمال در منوی اصلی، دستور /start را بزنید."
+        f"✅ ایموجی <b>عادی</b> دکمه «{label}» به‌روزرسانی شد.\nنمایش جدید: <b>{current}</b>"
+        "\n\nبرای اعمال در منوی اصلی، دستور /start را بزنید."
     )
 
 
@@ -242,101 +314,17 @@ async def button_toggle(
     await callback.answer("فعال شد ✅" if not ap.is_enabled else "غیرفعال شد 🚫")
 
 
-# --------------------------- PREMIUM EMOJI ---------------------------
-@router.callback_query(ButtonCB.filter(F.action == "premium"), IsAdmin())
-async def button_premium_start(
-    callback: CallbackQuery, callback_data: ButtonCB, state: FSMContext
-) -> None:
-    label = BUTTON_LABELS.get(callback_data.key, callback_data.key)
-    await state.set_state(ButtonEditFlow.entering_premium_emoji)
-    await state.update_data(button_key=callback_data.key)
-    await edit_or_answer(
-        callback.message,
-        f"⭐️ یک <b>ایموجی پرمیوم</b> برای دکمه «{label}» ارسال کنید.\n\n"
-        "• فقط یک ایموجی پرمیوم بفرستید (نیازمند اشتراک تلگرام پرمیوم).\n"
-        "• برای <b>حذف</b> ایموجی پرمیوم فعلی، کلمهٔ «حذف» را بفرستید.",
-        reply_markup=cancel_only(),
-    )
-    await callback.answer()
-
-
-@router.message(ButtonEditFlow.entering_premium_emoji, IsAdmin())
-async def button_premium_save(
-    message: Message, services: Services, state: FSMContext, bot: Bot
-) -> None:
-    data = await state.get_data()
-    key = data.get("button_key")
-    if not key:
-        await state.clear()
-        await message.answer("خطا: کلید دکمه یافت نشد.")
-        return
-    label = BUTTON_LABELS.get(key, key)
-
-    # «حذف» clears the current premium emoji.
-    if (message.text or "").strip() == "حذف":
-        await services.button.clear_premium_emoji(key)
-        await services.commit()
-        await state.clear()
-        await message.answer(
-            f"✅ ایموجی پرمیوم دکمه «{label}» حذف شد.\nبرای اعمال، دستور /start را بزنید."
-        )
-        return
-
-    # A premium emoji can arrive in the message text or in a media caption, so
-    # inspect both entity lists. The matching slice of text/caption is kept as a
-    # human-readable placeholder (``emoji_text``).
-    source = message.text or message.caption or ""
-    entities = list(message.entities or []) + list(message.caption_entities or [])
-    custom_emoji_id = None
-    emoji_text = source.strip()
-    for ent in entities:
-        if ent.type == "custom_emoji" and ent.custom_emoji_id:
-            custom_emoji_id = ent.custom_emoji_id
-            emoji_text = source[ent.offset : ent.offset + ent.length] or emoji_text
-            break
-    if not custom_emoji_id:
-        await message.answer(
-            "❌ ایموجی پرمیوم یافت نشد.\n\n"
-            "لطفاً یک <b>ایموجی پرمیوم</b> (Custom Emoji) ارسال کنید — همان ایموجی‌های "
-            "متحرک/ویژه‌ای که فقط با اشتراک تلگرام پرمیوم قابل ارسال‌اند. "
-            "ایموجی معمولی پذیرفته نمی‌شود (برای ایموجی معمولی از «😀 تغییر ایموجی» استفاده کنید).\n\n"
-            "برای حذف ایموجی پرمیوم فعلی، «حذف» را بفرستید."
-        )
-        return
-
-    # Validate the bot can actually USE this custom emoji before storing it,
-    # otherwise it would never render on the button. ``get_custom_emoji_stickers``
-    # returns the sticker(s) for usable ids and an empty list / error otherwise.
-    try:
-        stickers = await bot.get_custom_emoji_stickers(custom_emoji_ids=[custom_emoji_id])
-    except TelegramBadRequest:
-        stickers = []
-    if not stickers:
-        await message.answer(
-            "❌ این ایموجی پرمیوم برای ربات قابل استفاده نیست و ذخیره نشد.\n\n"
-            "نمایش ایموجی پرمیوم روی دکمه‌ها نیازمند آن است که <b>مالک ربات</b> اشتراک "
-            "تلگرام پرمیوم داشته باشد (یا یوزرنیم ربات از Fragment خریداری شده باشد). "
-            "یک ایموجی پرمیوم دیگر امتحان کنید یا «حذف» را بفرستید."
-        )
-        return
-
-    await services.button.set_premium_emoji(key, custom_emoji_id, emoji_text or None)
-    await services.commit()
-    await state.clear()
-    await message.answer(
-        f"✅ ایموجی پرمیوم برای دکمه «{label}» تنظیم و اعتبارسنجی شد.\n\n"
-        "برای اعمال در منوی اصلی، دستور /start را بزنید."
-    )
-
-
-@router.callback_query(ButtonCB.filter(F.action == "clear_premium"), IsAdmin())
-async def button_clear_premium(
+# --------------------------- CLEAR EMOJI ---------------------------
+@router.callback_query(ButtonCB.filter(F.action == "clear_emoji"), IsAdmin())
+async def button_clear_emoji(
     callback: CallbackQuery, callback_data: ButtonCB, services: Services
 ) -> None:
+    """Remove the current emoji (normal and/or premium) from the button."""
+    await services.button.set_emoji(callback_data.key, "")
     await services.button.clear_premium_emoji(callback_data.key)
     await services.commit()
     await _show_detail(callback, services, callback_data.key)
-    await callback.answer("ایموجی پرمیوم حذف شد.")
+    await callback.answer("ایموجی حذف شد.")
 
 
 # ----------------------------- RESET -----------------------------
