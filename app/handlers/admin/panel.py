@@ -29,7 +29,7 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="➕ افزودن اکانت", callback_data=AdminCB(action="add_account"))
     kb.button(text="🗂 مدیریت اکانت‌های فروش", callback_data=AdminCB(action="manage_accounts"))
     kb.button(text="📝 اکانت‌های درخواستی", callback_data=AdminCB(action="requested_accounts"))
-    kb.button(text="💎 قیمت جم", callback_data=AdminCB(action="diamond_prices"))
+    kb.button(text="💰 مدیریت قیمت‌ها", callback_data=AdminCB(action="diamond_prices"))
     kb.button(text="💳 مدیریت کارت‌ها", callback_data=AdminCB(action="cards"))
     kb.button(text="🎟 کدهای تخفیف", callback_data=AdminCB(action="discounts"))
     kb.button(text="🎁 قرعه‌کشی", callback_data=AdminCB(action="lottery"))

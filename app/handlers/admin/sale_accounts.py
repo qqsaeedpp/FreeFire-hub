@@ -28,8 +28,6 @@ def _detail(acc: Account) -> str:
         f"🗂 <b>اکانت #{acc.id}</b>\n"
         f"{acc.title}\n\n"
         f"💵 قیمت: <b>{format_toman(acc.price)}</b>\n"
-        f"🎚 لول: {acc.level} | 🎽 اسکین: {acc.skins_count} | "
-        f"⭐️ الیت: {acc.elite_count} | 🔫 گان: {acc.gun_skins_count}\n"
         f"وضعیت: {ACCOUNT_STATUS_FA.get(acc.status, acc.status)}\n\n"
         f"📝 {acc.description or '-'}"
     )

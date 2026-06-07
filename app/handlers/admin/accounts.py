@@ -16,6 +16,7 @@ from app.container import Services
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminSaleCB, NavCB
 from app.keyboards.inline import cancel_only
+from app.services.diamond_service import CAT_ACCOUNT, CAT_DIAMOND, CAT_LEVELUP
 from app.services.notification_service import NotificationService
 from app.states.admin_states import EditDiamondPrice
 from app.utils.helpers import edit_or_answer, format_toman
@@ -93,32 +94,63 @@ async def sale_list(
 
 
 # ============================ DIAMOND PRICES ============================
-def _diamond_prices_kb(plans) -> InlineKeyboardBuilder:
+# The price panel is organised into three independent categories. Each category
+# key maps to a plan category; "levelup" additionally exposes the buy-all bundle.
+_PRICE_CATS = {
+    "uid": (CAT_DIAMOND, "🆔 قیمت جم با UID"),
+    "account": (CAT_ACCOUNT, "🔐 قیمت جم با اطلاعات اکانت"),
+    "levelup": (CAT_LEVELUP, "🚀 قیمت Level Up"),
+}
+# Reverse lookup: a plan's category → the panel key it lives under.
+_CAT_TO_KEY = {cat: key for key, (cat, _) in _PRICE_CATS.items()}
+# Sentinel plan_code used when editing the Level-Up buy-all bundle price.
+_LVLALL_CODE = "__levelup_all__"
+
+
+def _price_categories_kb() -> InlineKeyboardBuilder:
+    kb = InlineKeyboardBuilder()
+    for key, (_, label) in _PRICE_CATS.items():
+        kb.button(text=label, callback_data=AdminCB(action="price_cat", value=key))
+    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="back_home"))
+    kb.adjust(1)
+    return kb
+
+
+def _category_prices_kb(plans, cat_key: str, all_price: int | None = None) -> InlineKeyboardBuilder:
     kb = InlineKeyboardBuilder()
     for p in plans:
         kb.button(
             text=f"{p.name} — {format_toman(p.price)}",
             callback_data=AdminCB(action="edit_plan", value=p.code),
         )
-    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="back_home"))
+    if cat_key == "levelup" and all_price is not None:
+        kb.button(
+            text=f"🛒 خرید همه — {format_toman(all_price)}",
+            callback_data=AdminCB(action="edit_lvlall"),
+        )
+    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="diamond_prices"))
     kb.adjust(1)
     return kb
 
 
-def _diamond_price_edit_kb() -> InlineKeyboardBuilder:
+def _diamond_price_edit_kb(cat_key: str) -> InlineKeyboardBuilder:
     kb = InlineKeyboardBuilder()
-    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="diamond_prices"))
+    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="price_cat", value=cat_key))
     kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
     kb.adjust(2)
     return kb
 
 
-async def _show_diamond_prices(message, services: Services) -> None:
-    plans = await services.diamond.list_plans()
+async def _show_category_prices(message, services: Services, cat_key: str) -> None:
+    category, label = _PRICE_CATS[cat_key]
+    plans = await services.diamond.list_plans_by_category(category)
+    all_price = (
+        await services.diamond.get_levelup_all_price() if cat_key == "levelup" else None
+    )
     await edit_or_answer(
         message,
-        "💎 برای تغییر قیمت، پلن موردنظر را انتخاب کنید:",
-        reply_markup=_diamond_prices_kb(plans).as_markup(),
+        f"{label}\nبرای تغییر قیمت، مورد دلخواه را انتخاب کنید:",
+        reply_markup=_category_prices_kb(plans, cat_key, all_price).as_markup(),
     )
 
 
@@ -127,7 +159,24 @@ async def diamond_prices(
     callback: CallbackQuery, services: Services, state: FSMContext
 ) -> None:
     await state.clear()
-    await _show_diamond_prices(callback.message, services)
+    await edit_or_answer(
+        callback.message,
+        "💰 <b>مدیریت قیمت‌ها</b>\nدسته‌بندی موردنظر را انتخاب کنید:",
+        reply_markup=_price_categories_kb().as_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminCB.filter(F.action == "price_cat"), IsAdmin())
+async def price_category(
+    callback: CallbackQuery, callback_data: AdminCB, services: Services, state: FSMContext
+) -> None:
+    cat_key = callback_data.value
+    if cat_key not in _PRICE_CATS:
+        await callback.answer("دسته نامعتبر.", show_alert=True)
+        return
+    await state.clear()
+    await _show_category_prices(callback.message, services, cat_key)
     await callback.answer()
 
 
@@ -139,13 +188,30 @@ async def edit_plan(
     if plan is None:
         await callback.answer("پلن یافت نشد.", show_alert=True)
         return
+    cat_key = _CAT_TO_KEY.get(plan.category, "uid")
     await state.set_state(EditDiamondPrice.entering_price)
-    await state.update_data(plan_code=callback_data.value)
+    await state.update_data(plan_code=callback_data.value, cat_key=cat_key)
     await edit_or_answer(
         callback.message,
         f"💎 پلن: <b>{plan.name}</b>\nقیمت فعلی: {format_toman(plan.price)}\n\n"
         f"قیمت جدید را وارد کنید (تومان):",
-        reply_markup=_diamond_price_edit_kb().as_markup(),
+        reply_markup=_diamond_price_edit_kb(cat_key).as_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminCB.filter(F.action == "edit_lvlall"), IsAdmin())
+async def edit_levelup_all(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    current = await services.diamond.get_levelup_all_price()
+    await state.set_state(EditDiamondPrice.entering_price)
+    await state.update_data(plan_code=_LVLALL_CODE, cat_key="levelup")
+    await edit_or_answer(
+        callback.message,
+        f"🛒 <b>خرید همه لول‌اپ‌ها</b>\nقیمت فعلی: {format_toman(current)}\n\n"
+        f"قیمت جدید را وارد کنید (تومان):",
+        reply_markup=_diamond_price_edit_kb("levelup").as_markup(),
     )
     await callback.answer()
 
@@ -159,14 +225,25 @@ async def save_plan_price(
         await message.answer("قیمت نامعتبر.")
         return
     data = await state.get_data()
-    ok = await services.diamond.set_plan_price(data["plan_code"], price)
+    cat_key = data.get("cat_key", "uid")
+    code = data.get("plan_code")
+    if code == _LVLALL_CODE:
+        await services.diamond.set_levelup_all_price(price)
+        ok = True
+    else:
+        ok = await services.diamond.set_plan_price(code, price)
     await services.commit()
     await state.clear()
     if ok:
-        plans = await services.diamond.list_plans()
+        category, label = _PRICE_CATS[cat_key]
+        plans = await services.diamond.list_plans_by_category(category)
+        all_price = (
+            await services.diamond.get_levelup_all_price()
+            if cat_key == "levelup" else None
+        )
         await message.answer(
-            "✅ قیمت به‌روزرسانی شد.\n\n💎 لیست پلن‌ها:",
-            reply_markup=_diamond_prices_kb(plans).as_markup(),
+            f"✅ قیمت به‌روزرسانی شد.\n\n{label}:",
+            reply_markup=_category_prices_kb(plans, cat_key, all_price).as_markup(),
         )
     else:
         await message.answer("پلن یافت نشد.")

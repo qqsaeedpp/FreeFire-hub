@@ -107,9 +107,18 @@ def diamond_category_menu() -> InlineKeyboardMarkup:
 
 
 def diamond_plan_menu(
-    plans: list[DiamondPlan], *, back_target: str, emoji: str = "💎"
+    plans: list[DiamondPlan],
+    *,
+    back_target: str,
+    emoji: str = "💎",
+    sizes: tuple[int, ...] | None = None,
 ) -> InlineKeyboardMarkup:
-    """Final step: pick a concrete plan from the given category (one per row)."""
+    """Final step: pick a concrete plan from the given category.
+
+    ``sizes`` controls the row layout (buttons-per-row). Pass ``(2,)`` for a
+    responsive two-column grid, or an explicit tuple like ``(2, 1, 2, 2, 2)`` to
+    pin a precise arrangement. Defaults to one plan per row.
+    """
     kb = InlineKeyboardBuilder()
     for plan in plans:
         kb.button(
@@ -117,7 +126,57 @@ def diamond_plan_menu(
             callback_data=DiamondCB(action="plan", value=plan.code),
             **style_kwargs(STYLE_PRIMARY),
         )
-    kb.adjust(1)
+    if sizes:
+        kb.adjust(*sizes)
+    else:
+        kb.adjust(1)
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target=back_target))
+    tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    tail.adjust(2)
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def diamond_levelup_menu(
+    plans: list[DiamondPlan],
+    selected: set[str],
+    *,
+    all_price: int,
+    back_target: str,
+) -> InlineKeyboardMarkup:
+    """Level-Up multi-select: tap to toggle each offer, then confirm or buy-all.
+
+    Selected offers are prefixed with ✅; the running total of the current
+    selection is shown on the confirm button. A separate "buy all" button picks
+    the whole catalog at the admin-configured bundle price.
+    """
+    kb = InlineKeyboardBuilder()
+    for plan in plans:
+        mark = "✅" if plan.code in selected else "▫️"
+        kb.button(
+            text=f"{mark} {plan.name} — {format_toman(plan.price)}",
+            callback_data=DiamondCB(action="lvl_toggle", value=plan.code),
+            **style_kwargs(STYLE_PRIMARY if plan.code in selected else None),
+        )
+    kb.adjust(2)
+
+    actions = InlineKeyboardBuilder()
+    total = sum(p.price for p in plans if p.code in selected)
+    if selected:
+        actions.button(
+            text=f"💳 خرید انتخاب‌شده‌ها ({format_toman(total)})",
+            callback_data=DiamondCB(action="lvl_done"),
+            **style_kwargs(STYLE_SUCCESS),
+        )
+    actions.button(
+        text=f"🛒 خرید همه ({format_toman(all_price)})",
+        callback_data=DiamondCB(action="lvl_all"),
+        **style_kwargs(STYLE_SUCCESS),
+    )
+    actions.adjust(1)
+    kb.attach(actions)
+
     tail = InlineKeyboardBuilder()
     tail.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target=back_target))
     tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
@@ -172,7 +231,7 @@ def accounts_list_menu(accounts, page: int, total_pages: int) -> InlineKeyboardM
     kb = InlineKeyboardBuilder()
     for acc in accounts:
         kb.button(
-            text=f"#{acc.id} | لول {acc.level} | {format_toman(acc.price)}",
+            text=f"#{acc.id} | {acc.title} | {format_toman(acc.price)}",
             callback_data=AccountCB(action="view", account_id=acc.id, page=page),
         )
     kb.adjust(1)

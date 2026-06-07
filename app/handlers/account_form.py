@@ -85,36 +85,13 @@ async def step_price(message: Message, state: FSMContext) -> None:
         await message.answer("❌ قیمت نامعتبر است. یک عدد وارد کنید.")
         return
     await state.update_data(price=price)
-    await state.set_state(AccountFormFlow.level)
-    await message.answer("🎚 لول اکانت:", reply_markup=cancel_only())
-
-
-@router.message(AccountFormFlow.level, F.text)
-async def step_level(message: Message, state: FSMContext) -> None:
-    await state.update_data(level=parse_price(message.text) or 0)
-    await state.set_state(AccountFormFlow.elite)
-    await message.answer("⭐️ تعداد الیت پس:", reply_markup=cancel_only())
-
-
-@router.message(AccountFormFlow.elite, F.text)
-async def step_elite(message: Message, state: FSMContext) -> None:
-    await state.update_data(elite=parse_price(message.text) or 0)
-    await state.set_state(AccountFormFlow.skins)
-    await message.answer("🎽 تعداد اسکین:", reply_markup=cancel_only())
-
-
-@router.message(AccountFormFlow.skins, F.text)
-async def step_skins(message: Message, state: FSMContext) -> None:
-    await state.update_data(skins=parse_price(message.text) or 0)
-    await state.set_state(AccountFormFlow.gun_skins)
-    await message.answer("🔫 تعداد گان اسکین:", reply_markup=cancel_only())
-
-
-@router.message(AccountFormFlow.gun_skins, F.text)
-async def step_gun_skins(message: Message, state: FSMContext) -> None:
-    await state.update_data(gun_skins=parse_price(message.text) or 0)
     await state.set_state(AccountFormFlow.description)
-    await message.answer("📝 توضیحات:", reply_markup=cancel_only())
+    await message.answer(
+        "📝 <b>توضیحات اکانت</b>\n"
+        "تمام مشخصات اکانت (لول، تعداد الیت، اسکین‌ها، گان‌ها، آیتم‌های خاص و …) "
+        "را در همین یک پیام بنویسید:",
+        reply_markup=cancel_only(),
+    )
 
 
 @router.message(AccountFormFlow.description, F.text)
@@ -162,33 +139,18 @@ async def step_save_info(message: Message, state: FSMContext) -> None:
 
 
 @router.message(AccountFormFlow.login_info, F.text)
-async def step_login_info(message: Message, state: FSMContext) -> None:
-    await state.update_data(login_info=_opt(message.text))
-    await state.set_state(AccountFormFlow.special_items)
-    await message.answer(
-        "✨ آیتم‌های خاص اکانت را بنویسید (اگر ندارید «-» بفرستید):",
-        reply_markup=cancel_only(),
-    )
-
-
-@router.message(AccountFormFlow.special_items, F.text)
-async def step_special_items(
+async def step_login_info(
     message: Message, services: Services, state: FSMContext, db_user: User, bot
 ) -> None:
+    await state.update_data(login_info=_opt(message.text))
     data = await state.get_data()
-    data["special_items"] = _opt(message.text)
     is_admin = data.get("mode") == "admin"
 
     account = await services.account.create_listing(
         title=data["title"],
         price=data["price"],
-        level=data["level"],
-        elite_count=data["elite"],
-        skins_count=data["skins"],
-        gun_skins_count=data["gun_skins"],
         description=data["description"],
         images=",".join(data.get("images", [])),
-        special_items=data["special_items"],
         credentials=data.get("login_info"),
         save_info=data.get("save_info"),
         status=AccountStatus.AVAILABLE if is_admin else AccountStatus.PENDING_REVIEW,
@@ -216,9 +178,6 @@ async def _notify_admin_new_listing(bot, account, seller: User) -> None:
         f"فروشنده: {user_ref(seller)}\n"
         f"عنوان: {account.title}\n"
         f"قیمت پیشنهادی: {format_toman(account.price)}\n"
-        f"لول: {account.level} | الیت: {account.elite_count} | "
-        f"اسکین: {account.skins_count} | گان: {account.gun_skins_count}\n"
-        f"آیتم خاص: {account.special_items or '-'}\n"
         f"توضیحات: {account.description or '-'}"
     )
     images = parse_images(account.images)

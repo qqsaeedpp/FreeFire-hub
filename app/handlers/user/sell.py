@@ -53,29 +53,13 @@ async def req_price(message: Message, state: FSMContext) -> None:
         await message.answer("❌ قیمت نامعتبر است.")
         return
     await state.update_data(price=price)
-    await state.set_state(RequestedAccountFlow.entering_elite)
-    await message.answer("⭐️ تعداد الیت پس مدنظر:", reply_markup=cancel_only())
-
-
-@router.message(RequestedAccountFlow.entering_elite, F.text)
-async def req_elite(message: Message, state: FSMContext) -> None:
-    await state.update_data(elite=parse_price(message.text) or 0)
-    await state.set_state(RequestedAccountFlow.entering_sets)
-    await message.answer("🎽 ست‌های موردنظر را بنویسید:", reply_markup=cancel_only())
-
-
-@router.message(RequestedAccountFlow.entering_sets, F.text)
-async def req_sets(message: Message, state: FSMContext) -> None:
-    await state.update_data(sets=message.text.strip())
-    await state.set_state(RequestedAccountFlow.entering_guns)
-    await message.answer("🔫 گان‌های موردنظر را بنویسید:", reply_markup=cancel_only())
-
-
-@router.message(RequestedAccountFlow.entering_guns, F.text)
-async def req_guns(message: Message, state: FSMContext) -> None:
-    await state.update_data(guns=message.text.strip())
     await state.set_state(RequestedAccountFlow.entering_description)
-    await message.answer("📝 توضیحات تکمیلی:", reply_markup=cancel_only())
+    await message.answer(
+        "📝 <b>توضیحات</b>\n"
+        "تمام مشخصات اکانت موردنظر (تعداد الیت، گان‌ها، ست‌ها، لول و توضیحات اضافی) "
+        "را در همین یک پیام بنویسید:",
+        reply_markup=cancel_only(),
+    )
 
 
 @router.message(RequestedAccountFlow.entering_description, F.text)
@@ -99,9 +83,6 @@ async def req_deposit(
     req = await services.account.create_requested_account(
         db_user.id,
         target_price=data["price"],
-        elite_count=data["elite"],
-        sets=data["sets"],
-        guns=data["guns"],
         description=data["description"],
         deposit_paid=True,
         deposit_receipt_file_id=file_id,
@@ -117,7 +98,6 @@ async def req_deposit(
         f"📝 <b>اکانت درخواستی</b> #{req.id}\n"
         f"کاربر: {user_ref(db_user)}\n"
         f"قیمت مدنظر: {format_toman(data['price'])}\n"
-        f"الیت: {data['elite']} | ست: {data['sets']} | گان: {data['guns']}\n"
         f"توضیحات: {data['description']}\n"
         f"بیعانه: {format_toman(settings.requested_account_deposit)} (پرداخت شد)\n\n"
         f"فیش بیعانه را بررسی و تایید کنید تا به لیست «اکانت‌های درخواستی» اضافه شود."

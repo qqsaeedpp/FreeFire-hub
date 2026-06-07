@@ -14,10 +14,16 @@ from app.keyboards.inline import (
     backup_code_menu,
     cancel_only,
     diamond_category_menu,
+    diamond_levelup_menu,
     diamond_method_menu,
     diamond_plan_menu,
 )
-from app.services.diamond_service import CAT_ACCOUNT, CAT_DIAMOND, CAT_LEVELUP
+from app.services.diamond_service import (
+    CAT_ACCOUNT,
+    CAT_DIAMOND,
+    CAT_LEVELUP,
+    DiamondPlan,
+)
 from app.services.tutorial_service import GOOGLE_BACKUP_CODE_VIDEO
 from app.keyboards.reply import build_main_menu
 from app.filters.buttons import MainBtn
@@ -50,18 +56,44 @@ async def entry(message: Message, services: Services, state: FSMContext) -> None
 _CAT_EMOJI = {CAT_DIAMOND: "💎", CAT_LEVELUP: "💫", CAT_ACCOUNT: "💸"}
 
 
+# Per-category row layout (buttons-per-row). Account uses an exact arrangement:
+# [weekly][monthly] / [weekly lite] / [offer1$][offer2$] / [520][2180] / [1060][5600].
+_CAT_SIZES = {
+    CAT_DIAMOND: (2,),
+    CAT_ACCOUNT: (2, 1, 2, 2, 2),
+}
+
+
 async def _show_plans(callback: CallbackQuery, services: Services, category: str) -> None:
     plans = await services.diamond.list_plans_by_category(category)
     back_target = "diamond_category" if category in (CAT_DIAMOND, CAT_LEVELUP) else "diamond_method"
     titles = {
         CAT_DIAMOND: "💎 <b>خرید جم</b>\nمقدار جم موردنظر را انتخاب کنید:",
-        CAT_LEVELUP: "💫 <b>لول اپ</b>\nآفر موردنظر را انتخاب کنید:",
         CAT_ACCOUNT: "💸 <b>خرید با اطلاعات اکانت</b>\nبسته موردنظر را انتخاب کنید:",
     }
     await callback.message.edit_text(
         titles[category],
         reply_markup=diamond_plan_menu(
-            plans, back_target=back_target, emoji=_CAT_EMOJI.get(category, "💎")
+            plans,
+            back_target=back_target,
+            emoji=_CAT_EMOJI.get(category, "💎"),
+            sizes=_CAT_SIZES.get(category),
+        ),
+    )
+
+
+async def _show_levelup(callback: CallbackQuery, services: Services, state: FSMContext) -> None:
+    """Render the Level-Up multi-select menu reflecting the current selection."""
+    data = await state.get_data()
+    selected = set(data.get("levelup_selected", []))
+    plans = await services.diamond.list_plans_by_category(CAT_LEVELUP)
+    all_price = await services.diamond.get_levelup_all_price()
+    await callback.message.edit_text(
+        "💫 <b>لول اپ</b>\n"
+        "می‌توانید چند آفر را همزمان انتخاب کنید و سپس «خرید انتخاب‌شده‌ها» را بزنید،\n"
+        "یا با «خرید همه» تمام آفرها را یکجا خریداری کنید:",
+        reply_markup=diamond_levelup_menu(
+            plans, selected, all_price=all_price, back_target="diamond_category"
         ),
     )
 
@@ -88,10 +120,82 @@ async def method_chosen(
 async def category_chosen(
     callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
 ) -> None:
-    category = CAT_LEVELUP if callback_data.value == "levelup" else CAT_DIAMOND
-    await state.update_data(method="uid", category=category)
-    await state.set_state(DiamondFlow.choosing_plan)
-    await _show_plans(callback, services, category)
+    if callback_data.value == "levelup":
+        await state.update_data(
+            method="uid", category=CAT_LEVELUP, levelup_selected=[],
+            levelup_mode=None,
+        )
+        await state.set_state(DiamondFlow.choosing_plan)
+        await _show_levelup(callback, services, state)
+    else:
+        await state.update_data(method="uid", category=CAT_DIAMOND)
+        await state.set_state(DiamondFlow.choosing_plan)
+        await _show_plans(callback, services, CAT_DIAMOND)
+    await callback.answer()
+
+
+# ----------------------- Level-Up multi-select -----------------------
+@router.callback_query(DiamondFlow.choosing_plan, DiamondCB.filter(F.action == "lvl_toggle"))
+async def levelup_toggle(
+    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
+) -> None:
+    data = await state.get_data()
+    selected = set(data.get("levelup_selected", []))
+    code = callback_data.value
+    if code in selected:
+        selected.discard(code)
+    else:
+        selected.add(code)
+    await state.update_data(levelup_selected=list(selected))
+    await _show_levelup(callback, services, state)
+    await callback.answer()
+
+
+@router.callback_query(DiamondFlow.choosing_plan, DiamondCB.filter(F.action == "lvl_done"))
+async def levelup_done(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    data = await state.get_data()
+    selected = set(data.get("levelup_selected", []))
+    if not selected:
+        await callback.answer("هیچ آفری انتخاب نشده است.", show_alert=True)
+        return
+    plans = [
+        p for p in await services.diamond.list_plans_by_category(CAT_LEVELUP)
+        if p.code in selected
+    ]
+    total = sum(p.price for p in plans)
+    names = "، ".join(p.name for p in plans)
+    await state.update_data(
+        levelup_mode="selected", levelup_name=names[:200], levelup_price=total
+    )
+    await state.set_state(DiamondUIDFlow.entering_uid)
+    await callback.message.edit_text(
+        f"پلن: {names} — {format_toman(total)}\n\n"
+        f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
+        reply_markup=cancel_only(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(DiamondFlow.choosing_plan, DiamondCB.filter(F.action == "lvl_all"))
+async def levelup_all(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    plans = await services.diamond.list_plans_by_category(CAT_LEVELUP)
+    all_price = await services.diamond.get_levelup_all_price()
+    names = "، ".join(p.name for p in plans)
+    await state.update_data(
+        levelup_mode="all",
+        levelup_name=f"خرید همه لول‌اپ‌ها ({names})"[:200],
+        levelup_price=all_price,
+    )
+    await state.set_state(DiamondUIDFlow.entering_uid)
+    await callback.message.edit_text(
+        f"پلن: خرید همه لول‌اپ‌ها — {format_toman(all_price)}\n\n"
+        f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
+        reply_markup=cancel_only(),
+    )
     await callback.answer()
 
 
@@ -159,7 +263,18 @@ async def uid_received(
         await message.answer("❌ UID نامعتبر است. یک عدد ۶ تا ۱۲ رقمی ارسال کنید.")
         return
     data = await state.get_data()
-    plan = await services.diamond.get_plan(data["plan_code"])
+    if data.get("levelup_mode"):
+        # Multi-select / buy-all Level-Up: a synthetic plan carries the combined
+        # name and total price (built in levelup_done / levelup_all).
+        plan = DiamondPlan(
+            code="levelup_bundle",
+            name=data["levelup_name"],
+            diamonds=0,
+            price=data["levelup_price"],
+            category=CAT_LEVELUP,
+        )
+    else:
+        plan = await services.diamond.get_plan(data["plan_code"])
     order = await services.diamond.create_uid_order(db_user.id, plan, uid)
     await services.commit()
     await state.update_data(order_id=order.id, uid=uid)

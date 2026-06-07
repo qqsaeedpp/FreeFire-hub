@@ -15,13 +15,9 @@ class Account(Base):
 
     title: Mapped[str] = mapped_column(String(255))
     price: Mapped[int] = mapped_column(BigInteger)  # Toman
-    level: Mapped[int] = mapped_column(Integer, default=0)
-    skins_count: Mapped[int] = mapped_column(Integer, default=0)
-    elite_count: Mapped[int] = mapped_column(Integer, default=0)
-    gun_skins_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Free-text spec written by the seller (level/skins/elite/etc. all go here).
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     images: Mapped[str | None] = mapped_column(Text, nullable=True)  # CSV of file_ids
-    special_items: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[AccountStatus] = mapped_column(
         Enum(AccountStatus), default=AccountStatus.AVAILABLE, index=True
@@ -64,9 +60,7 @@ class RequestedAccount(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     target_price: Mapped[int] = mapped_column(BigInteger)
-    elite_count: Mapped[int] = mapped_column(Integer, default=0)
-    sets: Mapped[str | None] = mapped_column(Text, nullable=True)
-    guns: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Free-text spec written by the requester (elite/sets/guns/level/etc.).
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     deposit_paid: Mapped[bool] = mapped_column(default=False)

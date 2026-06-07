@@ -42,11 +42,7 @@ def _detail_text(acc: Account) -> str:
     return (
         f"🛒 <b>اکانت #{acc.id}</b>\n"
         f"{acc.title}\n\n"
-        f"💵 قیمت: <b>{format_toman(acc.price)}</b>\n"
-        f"🎚 لول: {acc.level}\n"
-        f"🎽 تعداد اسکین: {acc.skins_count}\n"
-        f"⭐️ تعداد الیت پس: {acc.elite_count}\n"
-        f"🔫 اسکین اسلحه: {acc.gun_skins_count}\n\n"
+        f"💵 قیمت: <b>{format_toman(acc.price)}</b>\n\n"
         f"📝 توضیحات:\n{acc.description or '-'}"
     )
 

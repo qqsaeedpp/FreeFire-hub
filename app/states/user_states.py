@@ -39,19 +39,18 @@ class AccountPurchaseFlow(StatesGroup):
 
 class AccountFormFlow(StatesGroup):
     """Unified account-listing form, shared by the admin 'add account' entry and
-    the user 'sell account' entry. ``mode`` in the FSM data is 'admin' or 'user'."""
+    the user 'sell account' entry. ``mode`` in the FSM data is 'admin' or 'user'.
+
+    Simplified: all account specs (level/elite/skins/guns/…) are written by the
+    seller inside the free-text ``description`` step.
+    """
 
     title = State()
     price = State()
-    level = State()
-    elite = State()
-    skins = State()
-    gun_skins = State()
     description = State()
     images = State()
     save_info = State()
     login_info = State()
-    special_items = State()
 
 
 class DiscountFlow(StatesGroup):
@@ -68,10 +67,10 @@ class PaymentFlow(StatesGroup):
 
 
 class RequestedAccountFlow(StatesGroup):
+    """Simplified: the requester writes all wanted specs (elite/sets/guns/level/…)
+    inside the free-text ``description`` step."""
+
     entering_price = State()
-    entering_elite = State()
-    entering_sets = State()
-    entering_guns = State()
     entering_description = State()
     awaiting_deposit_receipt = State()
 
