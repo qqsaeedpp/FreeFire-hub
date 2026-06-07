@@ -5,10 +5,16 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class DiamondFlow(StatesGroup):
-    """Shared first steps of the diamond purchase: pick the amount, then the method."""
+    """Shared first steps of the diamond purchase.
 
-    choosing_amount = State()
+    Old order (amount → method) is restored to the original (method first):
+    pick the purchase method, then — for UID — pick a category (جم / لول اپ),
+    and finally a concrete plan.
+    """
+
     choosing_method = State()
+    choosing_category = State()
+    choosing_plan = State()
 
 
 class DiamondUIDFlow(StatesGroup):

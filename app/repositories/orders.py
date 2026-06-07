@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 
-from app.core.constants import OrderStatus
+from collections.abc import Sequence
+
+from app.core.constants import OrderStatus, OrderType
 from app.models.order import AccountOrder, DiamondOrder, Order
 from app.repositories.base import BaseRepository
 
@@ -53,6 +55,33 @@ class OrderRepository(BaseRepository[Order]):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def list_by_status_and_types(
+        self,
+        status: OrderStatus,
+        types: Sequence[OrderType],
+        *,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> list[Order]:
+        result = await self.session.execute(
+            select(Order)
+            .where(Order.status == status, Order.order_type.in_(tuple(types)))
+            .order_by(Order.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_by_status_and_types(
+        self, status: OrderStatus, types: Sequence[OrderType]
+    ) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Order)
+            .where(Order.status == status, Order.order_type.in_(tuple(types)))
+        )
+        return int(result.scalar_one())
 
     async def get_diamond(self, order_id: int) -> DiamondOrder | None:
         return await self.session.get(DiamondOrder, order_id)

@@ -14,7 +14,14 @@ from app.core.constants import OrderType
 from app.models.order import DiamondOrder
 from app.repositories.orders import OrderRepository
 
-_PLANS_KEY = "diamond:plans"
+# Bumped to v2 to force a one-time reseed of the categorized catalog
+# (older cached payloads lack the new ``category`` field).
+_PLANS_KEY = "diamond:plans:v2"
+
+# Plan categories.
+CAT_DIAMOND = "diamond"   # خرید با UID → جم
+CAT_LEVELUP = "levelup"   # خرید با UID → لول اپ
+CAT_ACCOUNT = "account"   # خرید با اطلاعات اکانت
 
 DEFAULT_PLANS: list["DiamondPlan"] = []
 
@@ -25,16 +32,39 @@ class DiamondPlan:
     name: str
     diamonds: int
     price: int  # Toman
+    category: str = CAT_DIAMOND
 
 
 def _default_plans() -> list[DiamondPlan]:
     return [
-        DiamondPlan("d100", "۱۰۰ الماس", 100, 95_000),
-        DiamondPlan("d310", "۳۱۰ الماس", 310, 270_000),
-        DiamondPlan("d520", "۵۲۰ الماس", 520, 440_000),
-        DiamondPlan("d1060", "۱۰۶۰ الماس", 1060, 850_000),
-        DiamondPlan("d2180", "۲۱۸۰ الماس", 2180, 1_700_000),
-        DiamondPlan("d5600", "۵۶۰۰ الماس", 5600, 4_200_000),
+        # ---------------- UID → جم ----------------
+        DiamondPlan("d110", "110 الماس", 110, 180_000, CAT_DIAMOND),
+        DiamondPlan("d230", "230 الماس", 230, 360_000, CAT_DIAMOND),
+        DiamondPlan("d340", "340 الماس", 340, 540_000, CAT_DIAMOND),
+        DiamondPlan("d580", "580 الماس", 580, 900_000, CAT_DIAMOND),
+        DiamondPlan("d810", "810 الماس", 810, 1_255_000, CAT_DIAMOND),
+        DiamondPlan("d1188", "1188 الماس", 1188, 1_790_000, CAT_DIAMOND),
+        DiamondPlan("d1520", "1520 الماس", 1520, 2_320_000, CAT_DIAMOND),
+        DiamondPlan("d2420", "2420 الماس", 2420, 3_580_000, CAT_DIAMOND),
+        DiamondPlan("d1000", "1000 الماس", 1000, 1_650_000, CAT_DIAMOND),
+        DiamondPlan("d2000", "2000 الماس", 2000, 3_300_000, CAT_DIAMOND),
+        DiamondPlan("d5000", "5000 الماس", 5000, 8_250_000, CAT_DIAMOND),
+        DiamondPlan("d10000", "10000 الماس", 10000, 16_500_000, CAT_DIAMOND),
+        DiamondPlan("d20000", "20000 الماس", 20000, 32_000_000, CAT_DIAMOND),
+        DiamondPlan("d50000", "50000 الماس", 50000, 79_999_999, CAT_DIAMOND),
+        # ---------------- UID → لول اپ ----------------
+        DiamondPlan("lvl6", "آفر لول 6", 0, 95_000, CAT_LEVELUP),
+        DiamondPlan("lvl10", "آفر لول 10", 0, 125_000, CAT_LEVELUP),
+        DiamondPlan("lvl15", "آفر لول 15", 0, 125_000, CAT_LEVELUP),
+        DiamondPlan("lvl20", "آفر لول 20", 0, 125_000, CAT_LEVELUP),
+        DiamondPlan("lvl25", "آفر لول 25", 0, 125_000, CAT_LEVELUP),
+        DiamondPlan("lvl30", "آفر لول 30", 0, 175_000, CAT_LEVELUP),
+        # ---------------- اطلاعات اکانت ----------------
+        DiamondPlan("accw", "هفتگی", 0, 299_000, CAT_ACCOUNT),
+        DiamondPlan("accm", "ماهانه", 0, 1_790_000, CAT_ACCOUNT),
+        DiamondPlan("accwl", "هفتگی لایت", 0, 120_000, CAT_ACCOUNT),
+        DiamondPlan("acco1", "آفر روزانه ۱$", 0, 185_000, CAT_ACCOUNT),
+        DiamondPlan("acco2", "آفر روزانه ۲$", 0, 370_000, CAT_ACCOUNT),
     ]
 
 
@@ -51,6 +81,9 @@ class DiamondService:
             return plans
         data = json.loads(raw)
         return [DiamondPlan(**p) for p in data]
+
+    async def list_plans_by_category(self, category: str) -> list[DiamondPlan]:
+        return [p for p in await self.list_plans() if p.category == category]
 
     async def get_plan(self, code: str) -> DiamondPlan | None:
         for plan in await self.list_plans():

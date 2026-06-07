@@ -64,24 +64,8 @@ def backup_code_menu(tutorial_key: str) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def diamond_amount_menu(plans: list[DiamondPlan]) -> InlineKeyboardMarkup:
-    """Step 1 of buying diamonds: choose the amount/plan (one per row)."""
-    kb = InlineKeyboardBuilder()
-    for plan in plans:
-        kb.button(
-            text=f"💎 {plan.name} — {format_toman(plan.price)}",
-            callback_data=DiamondCB(action="plan", value=plan.code),
-            **style_kwargs(STYLE_PRIMARY),
-        )
-    kb.adjust(1)
-    tail = InlineKeyboardBuilder()
-    tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
-    kb.attach(tail)
-    return kb.as_markup()
-
-
 def diamond_method_menu() -> InlineKeyboardMarkup:
-    """Step 2 of buying diamonds: choose the purchase method (after the amount)."""
+    """Step 1 of buying diamonds: choose the purchase method (UID vs account)."""
     kb = InlineKeyboardBuilder()
     kb.button(
         text="🆔 خرید با UID",
@@ -95,7 +79,47 @@ def diamond_method_menu() -> InlineKeyboardMarkup:
     )
     kb.adjust(1)
     tail = InlineKeyboardBuilder()
-    tail.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target="diamond_amount"))
+    tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def diamond_category_menu() -> InlineKeyboardMarkup:
+    """Step 2 (UID only): choose between buying gems or a level-up offer."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="💎 خرید جم",
+        callback_data=DiamondCB(action="category", value="diamond"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.button(
+        text="💫 لول اپ",
+        callback_data=DiamondCB(action="category", value="levelup"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.adjust(1)
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target="diamond_method"))
+    tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    tail.adjust(2)
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def diamond_plan_menu(
+    plans: list[DiamondPlan], *, back_target: str, emoji: str = "💎"
+) -> InlineKeyboardMarkup:
+    """Final step: pick a concrete plan from the given category (one per row)."""
+    kb = InlineKeyboardBuilder()
+    for plan in plans:
+        kb.button(
+            text=f"{emoji} {plan.name} — {format_toman(plan.price)}",
+            callback_data=DiamondCB(action="plan", value=plan.code),
+            **style_kwargs(STYLE_PRIMARY),
+        )
+    kb.adjust(1)
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت", callback_data=NavCB(action="back", target=back_target))
     tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
     tail.adjust(2)
     kb.attach(tail)
@@ -130,6 +154,17 @@ def _pagination_row(cb_factory, action: str, page: int, total_pages: int):
     nav.button(text=f"{page}/{total_pages}", callback_data=NavCB(action="noop"))
     if page < total_pages:
         nav.button(text="بعدی ➡️", callback_data=cb_factory(action=action, page=page + 1))
+    return nav
+
+
+def _pagination_row_kind(cb_factory, action: str, page: int, total_pages: int, kind):
+    """Like :func:`_pagination_row`, but threads a ``kind`` through the callback."""
+    nav = InlineKeyboardBuilder()
+    if page > 1:
+        nav.button(text="⬅️ قبلی", callback_data=cb_factory(action=action, page=page - 1, kind=kind))
+    nav.button(text=f"{page}/{total_pages}", callback_data=NavCB(action="noop"))
+    if page < total_pages:
+        nav.button(text="بعدی ➡️", callback_data=cb_factory(action=action, page=page + 1, kind=kind))
     return nav
 
 
@@ -289,29 +324,53 @@ def admin_order_review(order_id: int) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def pending_orders_menu(orders, page: int, total_pages: int) -> InlineKeyboardMarkup:
+def pending_kind_menu() -> InlineKeyboardMarkup:
+    """Chooser: which pending list to open — diamond orders or account orders."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="💎 سفارش‌های در انتظار خرید جم",
+        callback_data=AdminCB(action="pending_orders", value="diamond"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.button(
+        text="🛒 سفارش‌های درحال انتظار خرید اکانت",
+        callback_data=AdminCB(action="pending_orders", value="account"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def pending_orders_menu(
+    orders, page: int, total_pages: int, kind: str | None = None
+) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for o in orders:
         kb.button(
             text=f"#{o.id} | {format_toman(o.amount)}",
-            callback_data=AdminOrderCB(action="open", order_id=o.id, page=page),
+            callback_data=AdminOrderCB(action="open", order_id=o.id, page=page, kind=kind),
         )
     kb.adjust(1)
-    kb.attach(_pagination_row(AdminOrderCB, "page", page, total_pages))
+    kb.attach(_pagination_row_kind(AdminOrderCB, "page", page, total_pages, kind))
 
     tail = InlineKeyboardBuilder()
-    tail.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    tail.button(
+        text="⬅️ بازگشت", callback_data=AdminCB(action="pending_orders")
+    )
     kb.attach(tail)
     return kb.as_markup()
 
 
-def pending_order_actions(order_id: int, page: int) -> InlineKeyboardMarkup:
+def pending_order_actions(
+    order_id: int, page: int, kind: str | None = None
+) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ تایید", callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page), **style_kwargs(STYLE_SUCCESS))
-    kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page), **style_kwargs(STYLE_DANGER))
-    kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page), **style_kwargs(STYLE_PRIMARY))
-    kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page))
-    kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page))
+    kb.button(text="✅ تایید", callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page, kind=kind), **style_kwargs(STYLE_SUCCESS))
+    kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page, kind=kind), **style_kwargs(STYLE_DANGER))
+    kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page, kind=kind), **style_kwargs(STYLE_PRIMARY))
+    kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page, kind=kind))
+    kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page, kind=kind))
     kb.adjust(2, 1, 1, 1)
     return kb.as_markup()
 

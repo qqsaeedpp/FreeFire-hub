@@ -96,6 +96,12 @@ ORDER_STATUS_FA: dict[str, str] = {
     OrderStatus.CANCELLED: "لغو شده",
 }
 
+ORDER_TYPE_FA: dict[str, str] = {
+    OrderType.DIAMOND_UID: "خرید جم با UID",
+    OrderType.DIAMOND_ACCOUNT: "خرید جم با اطلاعات اکانت",
+    OrderType.ACCOUNT_PURCHASE: "خرید اکانت",
+}
+
 TICKET_STATUS_FA: dict[str, str] = {
     TicketStatus.OPEN: "باز",
     TicketStatus.ANSWERED: "پاسخ داده شده",

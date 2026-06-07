@@ -9,8 +9,8 @@ class MenuCB(CallbackData, prefix="menu"):
 
 
 class DiamondCB(CallbackData, prefix="dia"):
-    action: str  # method | plan
-    value: str | None = None  # plan code or "uid"/"account"
+    action: str  # method | category | plan
+    value: str | None = None  # plan code, "uid"/"account", or "diamond"/"levelup"
 
 
 class AccountCB(CallbackData, prefix="acc"):
@@ -29,6 +29,9 @@ class AdminOrderCB(CallbackData, prefix="aord"):
     action: str  # approve | reject | complete | details | open | page
     order_id: int = 0
     page: int = 1
+    # Which pending list this row belongs to: "diamond" | "account".
+    # Nullable trailing field so an empty segment unpacks cleanly.
+    kind: str | None = None
 
 
 class AdminCB(CallbackData, prefix="adm"):

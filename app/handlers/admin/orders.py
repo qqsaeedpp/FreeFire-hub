@@ -5,9 +5,12 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from html import escape
+
 from app.container import Services
 from app.core.constants import (
     ORDER_STATUS_FA,
+    ORDER_TYPE_FA,
     PAYMENT_METHOD_FA,
     OrderStatus,
     OrderType,
@@ -15,7 +18,11 @@ from app.core.constants import (
 from app.core.security import decrypt
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminOrderCB
-from app.keyboards.inline import pending_order_actions, pending_orders_menu
+from app.keyboards.inline import (
+    pending_kind_menu,
+    pending_order_actions,
+    pending_orders_menu,
+)
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.admin_states import RejectReasonFlow
@@ -25,26 +32,45 @@ router = Router(name="admin_orders")
 
 _PENDING_PAGE_SIZE = 10
 
+# Which order types belong to each pending list, and its Persian title.
+_KIND_TYPES: dict[str, tuple[OrderType, ...]] = {
+    "diamond": (OrderType.DIAMOND_UID, OrderType.DIAMOND_ACCOUNT),
+    "account": (OrderType.ACCOUNT_PURCHASE,),
+}
+_KIND_TITLE = {"diamond": "خرید جم", "account": "خرید اکانت"}
 
-async def _pending_list_content(services: Services, page: int):
-    """Compute (text, markup) for the pending-orders list with a smart page clamp."""
-    total = await services.orders.count_by_status(OrderStatus.UNDER_REVIEW)
+
+def _normalize_kind(kind: str | None) -> str:
+    return kind if kind in _KIND_TYPES else "diamond"
+
+
+async def _pending_list_content(services: Services, page: int, kind: str):
+    """Compute (text, markup) for one pending-orders list with a smart page clamp."""
+    kind = _normalize_kind(kind)
+    types = _KIND_TYPES[kind]
+    total = await services.orders.count_by_status_and_types(
+        OrderStatus.UNDER_REVIEW, types
+    )
     total_pages = max(1, (total + _PENDING_PAGE_SIZE - 1) // _PENDING_PAGE_SIZE)
     page = max(1, min(page, total_pages))  # smart-clamp when a page empties out
+    title = _KIND_TITLE[kind]
     if total == 0:
-        return "✅ سفارشی در انتظار بررسی نیست.", pending_orders_menu([], 1, 1)
+        return (
+            f"✅ سفارشی در انتظار بررسی برای «{title}» نیست.",
+            pending_orders_menu([], 1, 1, kind),
+        )
     offset = (page - 1) * _PENDING_PAGE_SIZE
-    orders = await services.orders.list_by_status(
-        OrderStatus.UNDER_REVIEW, offset=offset, limit=_PENDING_PAGE_SIZE
+    orders = await services.orders.list_by_status_and_types(
+        OrderStatus.UNDER_REVIEW, types, offset=offset, limit=_PENDING_PAGE_SIZE
     )
     text = (
-        f"🧾 <b>سفارش‌های در انتظار بررسی</b> ({total} سفارش)\nیکی را انتخاب کنید:"
+        f"🧾 <b>سفارش‌های در انتظار {title}</b> ({total} سفارش)\nیکی را انتخاب کنید:"
     )
-    return text, pending_orders_menu(orders, page, total_pages)
+    return text, pending_orders_menu(orders, page, total_pages, kind)
 
 
-async def _show_pending(message, services: Services, page: int) -> None:
-    text, markup = await _pending_list_content(services, page)
+async def _show_pending(message, services: Services, page: int, kind: str) -> None:
+    text, markup = await _pending_list_content(services, page, kind)
     await edit_or_answer(message, text, reply_markup=markup)
 
 
@@ -64,7 +90,7 @@ def _order_caption(order, user) -> str:
     method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
     return (
         f"🧾 <b>سفارش #{order.id}</b>\n"
-        f"نوع: {order.order_type}\n"
+        f"نوع: {ORDER_TYPE_FA.get(order.order_type, order.order_type)}\n"
         f"کاربر: {user_ref(user)}\n"
         f"روش پرداخت: {method_fa}\n"
         f"مبلغ: {format_toman(order.amount)}\n"
@@ -74,10 +100,23 @@ def _order_caption(order, user) -> str:
 
 @router.callback_query(AdminCB.filter(F.action == "pending_orders"), IsAdmin())
 async def pending_orders(
-    callback: CallbackQuery, services: Services, state: FSMContext, bot
+    callback: CallbackQuery,
+    callback_data: AdminCB,
+    services: Services,
+    state: FSMContext,
+    bot,
 ) -> None:
     await _delete_pending_receipt(bot, callback.message.chat.id, state)
-    await _show_pending(callback.message, services, page=1)
+    # No value → show the chooser (diamond vs account). With a value → open
+    # that specific filtered list.
+    if callback_data.value in _KIND_TYPES:
+        await _show_pending(callback.message, services, page=1, kind=callback_data.value)
+    else:
+        await edit_or_answer(
+            callback.message,
+            "🧾 <b>سفارش‌های در انتظار</b>\nکدام بخش را می‌خواهید ببینید؟",
+            reply_markup=pending_kind_menu(),
+        )
     await callback.answer()
 
 
@@ -90,7 +129,9 @@ async def pending_page(
     bot,
 ) -> None:
     await _delete_pending_receipt(bot, callback.message.chat.id, state)
-    await _show_pending(callback.message, services, page=callback_data.page)
+    await _show_pending(
+        callback.message, services, page=callback_data.page, kind=callback_data.kind
+    )
     await callback.answer()
 
 
@@ -110,7 +151,7 @@ async def open_order(
     await _delete_pending_receipt(bot, callback.message.chat.id, state)
     user = await services.users.get(order.user_id)
     caption = _order_caption(order, user)
-    actions = pending_order_actions(order.id, callback_data.page)
+    actions = pending_order_actions(order.id, callback_data.page, callback_data.kind)
     # The list message is edited in place into the order detail (so it can later
     # be refreshed in place); the receipt photo is sent as a separate message.
     await edit_or_answer(callback.message, caption, reply_markup=actions)
@@ -137,21 +178,34 @@ async def order_details(
     lines = [
         f"📄 <b>جزئیات سفارش #{order.id}</b>",
         f"کاربر: {user_ref(user)}",
-        f"نوع: {order.order_type}",
+        f"نوع: {ORDER_TYPE_FA.get(order.order_type, order.order_type)}",
         f"مبلغ: {format_toman(order.amount)}",
         f"وضعیت: {ORDER_STATUS_FA.get(order.status, order.status)}",
     ]
 
+    def dec(value: str | None) -> str:
+        """Decrypt a stored credential, HTML-escaping the result.
+
+        Never raises: a corrupt/legacy ciphertext degrades to «-» instead of
+        crashing the whole details view (which previously made the button look
+        like it "did nothing").
+        """
+        if not value:
+            return "-"
+        try:
+            return escape(decrypt(value))
+        except Exception:  # noqa: BLE001 - bad/legacy ciphertext
+            return "-"
+
     if order.order_type in (OrderType.DIAMOND_UID, OrderType.DIAMOND_ACCOUNT):
         diamond = await services.orders.get_diamond(order.id)
         if diamond:
-            lines.append(f"پلن: {diamond.plan_name} ({diamond.diamonds} الماس)")
+            lines.append(
+                f"پلن: {escape(str(diamond.plan_name or '-'))} ({diamond.diamonds} الماس)"
+            )
             if order.order_type == OrderType.DIAMOND_UID:
-                lines.append(f"🆔 UID: <code>{diamond.uid}</code>")
+                lines.append(f"🆔 UID: <code>{escape(str(diamond.uid or '-'))}</code>")
             else:
-                def dec(value: str | None) -> str:
-                    return decrypt(value) if value else "-"
-
                 lines += [
                     f"📧 ایمیل اکانت: <code>{dec(diamond.account_email)}</code>",
                     f"🔑 رمز جیمیل: <code>{dec(diamond.gmail_password)}</code>",
@@ -162,7 +216,11 @@ async def order_details(
         if acc_order:
             lines.append(f"🛒 اکانت: #{acc_order.account_id}")
 
-    await callback.message.answer("\n".join(lines))
+    body = "\n".join(lines)
+    try:
+        await callback.message.answer(body)
+    except Exception:  # noqa: BLE001 - HTML parse fallback → send as plain text
+        await callback.message.answer(body, parse_mode=None)
     await callback.answer()
 
 
@@ -191,7 +249,9 @@ async def approve(
     # order drops out at once. Notification card (photo) → keep its caption.
     if callback.message.photo is None:
         await _delete_pending_receipt(bot, callback.message.chat.id, state)
-        await _show_pending(callback.message, services, page=callback_data.page)
+        await _show_pending(
+            callback.message, services, page=callback_data.page, kind=callback_data.kind
+        )
     else:
         await _refresh(callback, order.id)
 
@@ -242,7 +302,9 @@ async def complete(
     await callback.answer("سفارش تکمیل شد.")
     if callback.message.photo is None:
         await _delete_pending_receipt(bot, callback.message.chat.id, state)
-        await _show_pending(callback.message, services, page=callback_data.page)
+        await _show_pending(
+            callback.message, services, page=callback_data.page, kind=callback_data.kind
+        )
     else:
         await _refresh(callback, order.id, completed=True)
 
@@ -261,6 +323,7 @@ async def reject_start(
             reject_list_chat_id=callback.message.chat.id,
             reject_list_msg_id=callback.message.message_id,
             reject_list_page=callback_data.page,
+            reject_list_kind=callback_data.kind,
         )
     else:
         await state.update_data(
@@ -268,6 +331,7 @@ async def reject_start(
             reject_list_chat_id=None,
             reject_list_msg_id=None,
             reject_list_page=callback_data.page,
+            reject_list_kind=callback_data.kind,
         )
     await callback.message.answer(
         f"دلیل رد سفارش #{callback_data.order_id} را بنویسید (یا «-» برای بدون دلیل):"
@@ -314,7 +378,7 @@ async def reject_finish(
     if list_chat_id and list_msg_id:
         await _delete_pending_receipt(bot, list_chat_id, state)
         text, markup = await _pending_list_content(
-            services, data.get("reject_list_page", 1)
+            services, data.get("reject_list_page", 1), data.get("reject_list_kind")
         )
         try:
             await bot.edit_message_text(

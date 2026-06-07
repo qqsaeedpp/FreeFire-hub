@@ -13,9 +13,11 @@ from app.keyboards.callbacks import DiamondCB, NavCB, TutorialCB
 from app.keyboards.inline import (
     backup_code_menu,
     cancel_only,
-    diamond_amount_menu,
+    diamond_category_menu,
     diamond_method_menu,
+    diamond_plan_menu,
 )
+from app.services.diamond_service import CAT_ACCOUNT, CAT_DIAMOND, CAT_LEVELUP
 from app.services.tutorial_service import GOOGLE_BACKUP_CODE_VIDEO
 from app.keyboards.reply import build_main_menu
 from app.filters.buttons import MainBtn
@@ -32,21 +34,69 @@ router = Router(name="user_diamond")
 
 @router.message(MainBtn(BTN_KEY_BUY_DIAMOND))
 async def entry(message: Message, services: Services, state: FSMContext) -> None:
-    # New flow: pick the diamond amount first, then the purchase method.
-    await state.set_state(DiamondFlow.choosing_amount)
-    plans = await services.diamond.list_plans()
+    # Original flow restored: first pick the purchase method (UID vs account).
+    await state.set_state(DiamondFlow.choosing_method)
     text, entities = await services.text.render("diamond_guide")
     if entities:
         await message.answer(
             text, entities=entities, parse_mode=None,
-            reply_markup=diamond_amount_menu(plans),
+            reply_markup=diamond_method_menu(),
         )
     else:
-        await message.answer(text, reply_markup=diamond_amount_menu(plans))
+        await message.answer(text, reply_markup=diamond_method_menu())
 
 
-@router.callback_query(DiamondFlow.choosing_amount, DiamondCB.filter(F.action == "plan"))
-async def amount_chosen(
+# Category emoji used in the plan list per category.
+_CAT_EMOJI = {CAT_DIAMOND: "💎", CAT_LEVELUP: "💫", CAT_ACCOUNT: "💸"}
+
+
+async def _show_plans(callback: CallbackQuery, services: Services, category: str) -> None:
+    plans = await services.diamond.list_plans_by_category(category)
+    back_target = "diamond_category" if category in (CAT_DIAMOND, CAT_LEVELUP) else "diamond_method"
+    titles = {
+        CAT_DIAMOND: "💎 <b>خرید جم</b>\nمقدار جم موردنظر را انتخاب کنید:",
+        CAT_LEVELUP: "💫 <b>لول اپ</b>\nآفر موردنظر را انتخاب کنید:",
+        CAT_ACCOUNT: "💸 <b>خرید با اطلاعات اکانت</b>\nبسته موردنظر را انتخاب کنید:",
+    }
+    await callback.message.edit_text(
+        titles[category],
+        reply_markup=diamond_plan_menu(
+            plans, back_target=back_target, emoji=_CAT_EMOJI.get(category, "💎")
+        ),
+    )
+
+
+@router.callback_query(DiamondFlow.choosing_method, DiamondCB.filter(F.action == "method"))
+async def method_chosen(
+    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
+) -> None:
+    if callback_data.value == "uid":
+        await state.update_data(method="uid")
+        await state.set_state(DiamondFlow.choosing_category)
+        await callback.message.edit_text(
+            "🆔 <b>خرید با UID</b>\nنوع خرید را انتخاب کنید:",
+            reply_markup=diamond_category_menu(),
+        )
+    else:
+        await state.update_data(method="account", category=CAT_ACCOUNT)
+        await state.set_state(DiamondFlow.choosing_plan)
+        await _show_plans(callback, services, CAT_ACCOUNT)
+    await callback.answer()
+
+
+@router.callback_query(DiamondFlow.choosing_category, DiamondCB.filter(F.action == "category"))
+async def category_chosen(
+    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
+) -> None:
+    category = CAT_LEVELUP if callback_data.value == "levelup" else CAT_DIAMOND
+    await state.update_data(method="uid", category=category)
+    await state.set_state(DiamondFlow.choosing_plan)
+    await _show_plans(callback, services, category)
+    await callback.answer()
+
+
+@router.callback_query(DiamondFlow.choosing_plan, DiamondCB.filter(F.action == "plan"))
+async def plan_chosen(
     callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
 ) -> None:
     plan = await services.diamond.get_plan(callback_data.value)
@@ -54,50 +104,47 @@ async def amount_chosen(
         await callback.answer("پلن یافت نشد.", show_alert=True)
         return
     await state.update_data(plan_code=plan.code)
-    await state.set_state(DiamondFlow.choosing_method)
-    await callback.message.edit_text(
-        f"💎 پلن انتخابی: <b>{plan.name}</b> — {format_toman(plan.price)}\n\n"
-        f"روش خرید را انتخاب کنید:",
-        reply_markup=diamond_method_menu(),
-    )
-    await callback.answer()
-
-
-@router.callback_query(DiamondFlow.choosing_method, DiamondCB.filter(F.action == "method"))
-async def method_chosen(
-    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
-) -> None:
     data = await state.get_data()
-    plan = await services.diamond.get_plan(data.get("plan_code"))
-    if not plan:
-        await callback.answer("ابتدا مقدار جم را انتخاب کنید.", show_alert=True)
-        return
-    if callback_data.value == "uid":
-        await state.set_state(DiamondUIDFlow.entering_uid)
-        await callback.message.edit_text(
-            f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
-            f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
-            reply_markup=cancel_only(),
-        )
-    else:
+    if data.get("method") == "account":
         await state.set_state(DiamondAccountFlow.entering_email)
         await callback.message.edit_text(
             f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
             f"📧 ایمیل اکانت را ارسال کنید:",
             reply_markup=cancel_only(),
         )
+    else:
+        await state.set_state(DiamondUIDFlow.entering_uid)
+        await callback.message.edit_text(
+            f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
+            f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
+            reply_markup=cancel_only(),
+        )
     await callback.answer()
 
 
-@router.callback_query(NavCB.filter((F.action == "back") & (F.target == "diamond_amount")))
-async def back_to_amount(
+@router.callback_query(NavCB.filter((F.action == "back") & (F.target == "diamond_method")))
+async def back_to_method(
     callback: CallbackQuery, services: Services, state: FSMContext
 ) -> None:
-    await state.set_state(DiamondFlow.choosing_amount)
-    plans = await services.diamond.list_plans()
+    await state.set_state(DiamondFlow.choosing_method)
+    text, entities = await services.text.render("diamond_guide")
+    if entities:
+        await callback.message.edit_text(
+            text, entities=entities, parse_mode=None, reply_markup=diamond_method_menu()
+        )
+    else:
+        await callback.message.edit_text(text, reply_markup=diamond_method_menu())
+    await callback.answer()
+
+
+@router.callback_query(NavCB.filter((F.action == "back") & (F.target == "diamond_category")))
+async def back_to_category(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    await state.set_state(DiamondFlow.choosing_category)
     await callback.message.edit_text(
-        "💎 <b>خرید جم</b>\nمقدار جم مورد نظر را انتخاب کنید:",
-        reply_markup=diamond_amount_menu(plans),
+        "🆔 <b>خرید با UID</b>\nنوع خرید را انتخاب کنید:",
+        reply_markup=diamond_category_menu(),
     )
     await callback.answer()
 
