@@ -4,6 +4,7 @@ from app.models.admin_log import AdminLog
 from app.models.bot_text import BotText
 from app.models.button_settings import ButtonSettings
 from app.models.discount import DiscountCode
+from app.models.locked_channel import LockedChannel
 from app.models.order import AccountOrder, DiamondOrder, Order
 from app.models.payment import Payment
 from app.models.payment_card import PaymentCard
@@ -33,4 +34,5 @@ __all__ = [
     "ButtonSettings",
     "TutorialMedia",
     "AdminLog",
+    "LockedChannel",
 ]

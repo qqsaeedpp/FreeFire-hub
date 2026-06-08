@@ -39,7 +39,8 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="📝 مدیریت متن‌های ربات", callback_data=AdminCB(action="texts"))
     kb.button(text="🎥 مدیریت ویدیوهای آموزشی", callback_data=AdminCB(action="tutorials"))
     kb.button(text="🎨 مدیریت دکمه‌ها", callback_data=AdminCB(action="buttons"))
-    kb.adjust(2, 2, 2, 2, 2, 2, 2, 2)
+    kb.button(text="🔒 تنظیم کانال قفل", callback_data=AdminCB(action="channel_lock"))
+    kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 1)
     return kb.as_markup()
 
 

@@ -75,6 +75,12 @@ class TutorialMediaFlow(StatesGroup):
     awaiting_video = State()
 
 
+class ChannelLockFlow(StatesGroup):
+    """Capture a channel identifier (@username / link / numeric id) to lock."""
+
+    entering_channel = State()
+
+
 class ButtonEditFlow(StatesGroup):
     """Capture a new text / emoji (normal or premium) for an editable main button."""
 

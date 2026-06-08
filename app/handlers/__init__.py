@@ -8,6 +8,7 @@ from app.handlers.admin import accounts as admin_accounts
 from app.handlers.admin import broadcast as admin_broadcast
 from app.handlers.admin import buttons as admin_buttons
 from app.handlers.admin import cards as admin_cards
+from app.handlers.admin import channel_lock as admin_channel_lock
 from app.handlers.admin import discounts as admin_discounts
 from app.handlers.admin import lottery as admin_lottery
 from app.handlers.admin import orders as admin_orders
@@ -18,6 +19,7 @@ from app.handlers.admin import texts as admin_texts
 from app.handlers.admin import tutorials as admin_tutorials
 from app.handlers.support import tickets as support_tickets
 from app.handlers.user import account as user_account
+from app.handlers.user import channel_lock as user_channel_lock
 from app.handlers.user import common as user_common
 from app.handlers.user import diamond as user_diamond
 from app.handlers.user import discount as user_discount
@@ -42,6 +44,7 @@ def register_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_texts.router)
     dp.include_router(admin_tutorials.router)
     dp.include_router(admin_buttons.router)
+    dp.include_router(admin_channel_lock.router)
 
     dp.include_router(support_tickets.router)
 
@@ -49,6 +52,7 @@ def register_routers(dp: Dispatcher) -> None:
     dp.include_router(account_form.router)
 
     dp.include_router(user_common.router)
+    dp.include_router(user_channel_lock.router)
     dp.include_router(user_payment.router)
     dp.include_router(user_discount.router)
     dp.include_router(user_diamond.router)

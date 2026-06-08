@@ -93,3 +93,8 @@ class AdminRequestedCB(CallbackData, prefix="areq"):
     action: str  # approve_deposit | reject_deposit | page | view | delete | confirm_delete
     req_id: int = 0
     page: int = 1
+
+
+class ChannelCB(CallbackData, prefix="chlock"):
+    action: str  # check (user) | view | toggle | delete | confirm_delete | test (admin)
+    channel_id: int = 0

@@ -14,6 +14,7 @@ from app.core.logger import configure_logging, get_logger
 from app.core.redis import close_redis, redis_client
 from app.handlers import register_routers
 from app.middlewares.ban import BanMiddleware
+from app.middlewares.channel_lock import ChannelLockMiddleware
 from app.middlewares.database import DatabaseMiddleware
 from app.middlewares.menu_reset import MenuResetMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
@@ -32,6 +33,8 @@ def build_dispatcher() -> Dispatcher:
     dp.update.outer_middleware(ThrottlingMiddleware())
     dp.update.outer_middleware(DatabaseMiddleware())
     dp.update.outer_middleware(BanMiddleware())
+    # Forced-channel-membership gate (after ban so db_user/services are loaded).
+    dp.update.outer_middleware(ChannelLockMiddleware())
 
     # Drop a stale FSM state when a main-menu button is tapped, before the
     # message is routed (otherwise a flow's state handler swallows the press).

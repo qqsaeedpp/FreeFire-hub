@@ -18,6 +18,7 @@ from app.repositories.bot_texts import BotTextRepository
 from app.repositories.button_settings import ButtonSettingsRepository
 from app.repositories.cards import PaymentCardRepository
 from app.repositories.discounts import DiscountCodeRepository
+from app.repositories.locked_channels import LockedChannelRepository
 from app.repositories.orders import OrderRepository
 from app.repositories.payments import PaymentRepository
 from app.repositories.referrals import ReferralRepository
@@ -28,6 +29,7 @@ from app.repositories.wallets import WalletRepository
 from app.services.account_service import AccountService
 from app.services.button_service import ButtonService
 from app.services.card_service import CardService
+from app.services.channel_lock_service import ChannelLockService
 from app.services.diamond_service import DiamondService
 from app.services.discount_service import DiscountService
 from app.services.order_service import OrderService
@@ -58,6 +60,7 @@ class Services:
         self.bot_texts_repo = BotTextRepository(session)
         self.tutorial_repo = TutorialMediaRepository(session)
         self.button_repo = ButtonSettingsRepository(session)
+        self.locked_channels_repo = LockedChannelRepository(session)
 
         # services
         self.wallet = WalletService(self.wallets_repo)
@@ -79,6 +82,7 @@ class Services:
         self.text = TextService(self.bot_texts_repo)
         self.tutorial = TutorialService(self.tutorial_repo)
         self.button = ButtonService(self.button_repo)
+        self.channel = ChannelLockService(self.locked_channels_repo, redis_client)
 
     async def commit(self) -> None:
         await self.session.commit()
