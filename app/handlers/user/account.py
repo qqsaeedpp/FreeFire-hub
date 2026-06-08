@@ -103,12 +103,14 @@ async def view_account(
         return
     images = parse_images(acc.images)
     kb = account_detail_menu(acc.id, callback_data.page)
-    if images:
-        # Albums can't carry inline buttons, so the gallery goes out first and the
-        # action buttons follow in a separate message.
-        await send_album(
-            bot, callback.message.chat.id, images, caption=_detail_text(acc)
-        )
+    # Albums can't carry inline buttons, so the gallery goes out first and the
+    # action buttons follow in a separate message. If the images are missing or
+    # rejected by Telegram (stale file_id), fall back to a text-only detail so the
+    # purchase buttons always appear and the flow never breaks.
+    sent_album = await send_album(
+        bot, callback.message.chat.id, images, caption=_detail_text(acc)
+    )
+    if sent_album:
         await callback.message.answer("👇 برای خرید این اکانت:", reply_markup=kb)
     else:
         await edit_or_answer(callback.message, _detail_text(acc), reply_markup=kb)

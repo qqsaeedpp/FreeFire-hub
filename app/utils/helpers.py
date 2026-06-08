@@ -140,23 +140,32 @@ async def send_album(
     file_ids: Sequence[str],
     *,
     caption: str | None = None,
-) -> None:
+) -> bool:
     """Send photos as a single ordered media group (album).
 
     One photo → a normal photo with caption. Many → an album whose caption sits
     on the first image. Order is preserved and nothing is dropped. Media groups
     cannot carry inline keyboards, so callers send buttons in a follow-up message.
+
+    Returns ``True`` if the photos were sent, ``False`` if there were none to send
+    or Telegram rejected them (e.g. a stale/invalid ``file_id``). A bad image must
+    never break the surrounding flow, so callers can fall back to a text-only view.
     """
     ids = [f for f in file_ids if f]
     if not ids:
-        return
-    if len(ids) == 1:
-        await bot.send_photo(chat_id, ids[0], caption=caption)
-        return
-    builder = MediaGroupBuilder(caption=caption)
-    for fid in ids:
-        builder.add_photo(media=fid)
-    await bot.send_media_group(chat_id, media=builder.build())
+        return False
+    try:
+        if len(ids) == 1:
+            await bot.send_photo(chat_id, ids[0], caption=caption)
+        else:
+            builder = MediaGroupBuilder(caption=caption)
+            for fid in ids:
+                builder.add_photo(media=fid)
+            await bot.send_media_group(chat_id, media=builder.build())
+    except TelegramBadRequest:
+        # Invalid/expired file identifier or HTTP URL — skip the gallery.
+        return False
+    return True
 
 
 def generate_referral_code(length: int = 8) -> str:
