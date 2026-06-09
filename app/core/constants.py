@@ -51,10 +51,13 @@ class CardPurpose(str, enum.Enum):
 
 
 class DepositType(str, enum.Enum):
-    """Which flow a configurable deposit (بیعانه) setting belongs to."""
+    """Which flow a configurable deposit (بیعانه) setting belongs to.
+
+    Deposit applies *only* to requested accounts; a normal account purchase is
+    paid in full and has no deposit.
+    """
 
     ACCOUNT_REQUEST = "account_request"   # 🎯 بیعانه اکانت درخواستی
-    ACCOUNT_PURCHASE = "account_purchase"  # 🛒 بیعانه خرید اکانت
 
 
 class AdminRole(str, enum.Enum):
@@ -146,7 +149,6 @@ CARD_PURPOSE_FA: dict[str, str] = {
 
 DEPOSIT_TYPE_FA: dict[str, str] = {
     DepositType.ACCOUNT_REQUEST: "🎯 بیعانه اکانت درخواستی",
-    DepositType.ACCOUNT_PURCHASE: "🛒 بیعانه خرید اکانت",
 }
 
 ADMIN_ROLE_FA: dict[str, str] = {

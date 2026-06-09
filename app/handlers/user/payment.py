@@ -25,7 +25,6 @@ from app.core.config import settings
 from app.core.constants import (
     PAYMENT_METHOD_FA,
     CardPurpose,
-    DepositType,
     PaymentMethod,
     TransactionType,
 )
@@ -43,22 +42,12 @@ router = Router(name="user_payment")
 async def card_payment_text(services: Services, purpose: CardPurpose, amount: int) -> str:
     """Build the card-to-card instructions for a given sales channel.
 
-    Account purchases read their destination card from the admin-managed
-    *deposit settings* (``ACCOUNT_PURCHASE``); every other channel uses the card
-    stored for its :class:`CardPurpose`. Both fall back to the ``CARD_NUMBER`` /
-    ``CARD_HOLDER`` env defaults when nothing is configured.
+    Uses the admin-managed card stored for ``purpose``, falling back to the
+    ``CARD_NUMBER`` / ``CARD_HOLDER`` env defaults when none is configured.
     """
-    number = ""
-    holder = ""
-    if purpose is CardPurpose.ACCOUNT:
-        dep = await services.deposit.get_or_seed(DepositType.ACCOUNT_PURCHASE)
-        await services.commit()
-        number = dep.card_number
-        holder = dep.card_holder
-    if not number:
-        card = await services.card.get_card(purpose)
-        number = card.card_number if card else settings.card_number
-        holder = card.holder_name if card else settings.card_holder
+    card = await services.card.get_card(purpose)
+    number = card.card_number if card else settings.card_number
+    holder = card.holder_name if card else settings.card_holder
     return (
         f"💳 مبلغ قابل پرداخت: <b>{format_toman(amount)}</b>\n\n"
         f"لطفاً مبلغ را به کارت زیر واریز کنید:\n"

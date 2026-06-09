@@ -1,8 +1,8 @@
-"""Admin: 💰 تنظیمات بیعانه — manage the deposit amount + card per flow.
+"""Admin: 💰 تنظیمات بیعانه — manage the requested-account deposit + card.
 
-Two subsections (requested account / account purchase); for each the admin sets
-the deposit amount, destination card number and card-holder name. Every paid
-flow reads these values at runtime, so nothing is hardcoded.
+Deposit applies *only* to requested accounts (not normal account purchases).
+The admin sets the deposit amount, destination card number and card-holder name;
+the requested-account flow reads these at runtime, so nothing is hardcoded.
 """
 from __future__ import annotations
 
@@ -24,18 +24,6 @@ from app.utils.validators import parse_price
 router = Router(name="admin_deposit")
 
 
-def _home_markup() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    for dtype in DepositType:
-        kb.button(
-            text=DEPOSIT_TYPE_FA[dtype],
-            callback_data=DepositCB(action="view", dtype=dtype.value),
-        )
-    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="back_home"))
-    kb.adjust(1)
-    return kb.as_markup()
-
-
 def _detail_markup(dtype: DepositType) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(
@@ -50,7 +38,7 @@ def _detail_markup(dtype: DepositType) -> InlineKeyboardMarkup:
         text="👤 نام صاحب کارت",
         callback_data=DepositCB(action="edit_holder", dtype=dtype.value),
     )
-    kb.button(text="🔙 بازگشت", callback_data=DepositCB(action="home"))
+    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="back_home"))
     kb.adjust(1)
     return kb.as_markup()
 
@@ -80,12 +68,9 @@ async def _show_detail(
 async def deposit_home(
     callback: CallbackQuery, services: Services, state: FSMContext
 ) -> None:
+    # Deposit applies only to requested accounts — open that detail directly.
     await state.clear()
-    await edit_or_answer(
-        callback.message,
-        "💰 <b>تنظیمات بیعانه</b>\n\nبخش موردنظر را برای تنظیم انتخاب کنید:",
-        reply_markup=_home_markup(),
-    )
+    await _show_detail(services, callback.message, DepositType.ACCOUNT_REQUEST)
     await callback.answer()
 
 
@@ -94,11 +79,7 @@ async def deposit_home_cb(
     callback: CallbackQuery, services: Services, state: FSMContext
 ) -> None:
     await state.clear()
-    await edit_or_answer(
-        callback.message,
-        "💰 <b>تنظیمات بیعانه</b>\n\nبخش موردنظر را برای تنظیم انتخاب کنید:",
-        reply_markup=_home_markup(),
-    )
+    await _show_detail(services, callback.message, DepositType.ACCOUNT_REQUEST)
     await callback.answer()
 
 
@@ -107,7 +88,7 @@ async def deposit_home_cb(
 async def deposit_view(
     callback: CallbackQuery, callback_data: DepositCB, services: Services
 ) -> None:
-    dtype = DepositType(callback_data.dtype)
+    dtype = DepositType(callback_data.dtype or DepositType.ACCOUNT_REQUEST.value)
     await _show_detail(services, callback.message, dtype)
     await callback.answer()
 

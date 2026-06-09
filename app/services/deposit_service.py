@@ -13,15 +13,13 @@ from app.repositories.deposit_settings import DepositSettingRepository
 
 
 # One-time seed defaults per deposit type, sourced from env (not hardcoded logic).
+# Deposit applies only to requested accounts.
 def _seed_defaults(deposit_type: DepositType) -> tuple[int, str, str]:
-    if deposit_type is DepositType.ACCOUNT_REQUEST:
-        return (
-            settings.requested_account_deposit,
-            settings.card_number,
-            settings.card_holder,
-        )
-    # ACCOUNT_PURCHASE: no preset amount; card seeded from the env default.
-    return (0, settings.card_number, settings.card_holder)
+    return (
+        settings.requested_account_deposit,
+        settings.card_number,
+        settings.card_holder,
+    )
 
 
 class DepositService:
