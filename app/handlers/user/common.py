@@ -9,11 +9,19 @@ from aiogram.types import CallbackQuery, Message
 from app.container import Services
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.filters.buttons import MainBtn
 from app.keyboards.callbacks import NavCB
 from app.keyboards.reply import build_main_menu
 from app.models.user import User
+from app.services.button_service import BTN_KEY_CONTACT
 from app.services.notification_service import NotificationService
-from app.utils.helpers import edit_or_answer, format_toman, safe_answer, user_ref
+from app.utils.helpers import (
+    answer_managed,
+    edit_or_answer,
+    format_toman,
+    safe_answer,
+    user_ref,
+)
 
 router = Router(name="user_common")
 log = get_logger("user.common")
@@ -94,6 +102,13 @@ async def start(
                 "نام": db_user.full_name or "-",
             },
         )
+
+
+@router.message(MainBtn(BTN_KEY_CONTACT))
+async def contact_methods(message: Message, services: Services) -> None:
+    """Show the admin-editable «راه‌های ارتباطی» text (read live from the DB)."""
+    rendered = await services.text.render("contact")
+    await answer_managed(message, rendered)
 
 
 @router.message(Command("menu"))

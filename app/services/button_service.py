@@ -28,6 +28,7 @@ BTN_KEY_WALLET = "wallet"
 BTN_KEY_REFERRAL = "referral"
 BTN_KEY_MY_ORDERS = "my_orders"
 BTN_KEY_SUPPORT = "support"
+BTN_KEY_CONTACT = "contact"
 BTN_KEY_ADMIN = "admin"
 
 # Order of the main menu (admin appended only for admins, handled by the keyboard).
@@ -39,6 +40,7 @@ MAIN_MENU_KEYS: tuple[str, ...] = (
     BTN_KEY_REFERRAL,
     BTN_KEY_MY_ORDERS,
     BTN_KEY_SUPPORT,
+    BTN_KEY_CONTACT,
 )
 
 # Hardcoded (emoji, text) defaults — must reproduce the historical labels exactly.
@@ -50,6 +52,7 @@ BUTTON_DEFAULTS: dict[str, tuple[str, str]] = {
     BTN_KEY_REFERRAL: ("🎁", "زیرمجموعه‌گیری"),
     BTN_KEY_MY_ORDERS: ("📦", "سفارش‌های من"),
     BTN_KEY_SUPPORT: ("🎧", "پشتیبانی"),
+    BTN_KEY_CONTACT: ("📞", "راه‌های ارتباطی"),
     BTN_KEY_ADMIN: ("🛠", "پنل مدیریت"),
 }
 
@@ -62,6 +65,7 @@ BUTTON_LABELS: dict[str, str] = {
     BTN_KEY_REFERRAL: "زیرمجموعه‌گیری",
     BTN_KEY_MY_ORDERS: "سفارش‌های من",
     BTN_KEY_SUPPORT: "پشتیبانی",
+    BTN_KEY_CONTACT: "راه‌های ارتباطی",
     BTN_KEY_ADMIN: "پنل مدیریت",
 }
 

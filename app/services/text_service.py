@@ -27,6 +27,7 @@ from app.repositories.bot_texts import BotTextRepository
 TEXT_LABELS: dict[str, str] = {
     "welcome": "پیام خوش‌آمد",
     "diamond_guide": "راهنمای خرید جم",
+    "contact": "راه‌های ارتباطی",
 }
 
 # Hardcoded HTML defaults used until an admin overrides them.
@@ -38,6 +39,15 @@ TEXT_DEFAULTS: dict[str, str] = {
         "برای شروع یکی از گزینه‌ها را انتخاب کنید 👇"
     ),
     "diamond_guide": "💎 <b>خرید جم</b>\nمقدار جم مورد نظر را انتخاب کنید:",
+    "contact": (
+        "📞 <b>راه‌های ارتباطی</b>\n\n"
+        "برای ارتباط با ما از راه‌های زیر استفاده کنید:\n\n"
+        "👤 ادمین: @your_admin\n"
+        "📢 کانال: @your_channel\n"
+        "💬 گروه پشتیبانی: @your_group\n"
+        "🌐 وبسایت: https://example.com\n\n"
+        "این متن از پنل مدیریت قابل ویرایش است."
+    ),
 }
 
 
