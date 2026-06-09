@@ -98,3 +98,15 @@ class AdminRequestedCB(CallbackData, prefix="areq"):
 class ChannelCB(CallbackData, prefix="chlock"):
     action: str  # check (user) | view | toggle | delete | confirm_delete | test (admin)
     channel_id: int = 0
+
+
+class DepositCB(CallbackData, prefix="dep"):
+    action: str  # home | view | edit_amount | edit_card | edit_holder
+    # Nullable trailing field: aiogram unpacks an empty trailing segment as None,
+    # so a bare ``str`` would reject callbacks that omit the type (e.g. "home").
+    dtype: str | None = None  # DepositType value: account_request | account_purchase
+
+
+class AdminMgmtCB(CallbackData, prefix="admgr"):
+    action: str  # home | add | remove | confirm_remove
+    user_id: int = 0

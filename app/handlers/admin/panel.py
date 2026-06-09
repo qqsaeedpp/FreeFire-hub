@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.container import Services
+from app.core.config import settings
 from app.core.constants import OrderStatus, TransactionType
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
@@ -22,7 +23,11 @@ from app.utils.validators import parse_price
 router = Router(name="admin_panel")
 
 
-def admin_menu() -> InlineKeyboardMarkup:
+def _is_owner(user_id: int) -> bool:
+    return user_id in settings.admin_ids
+
+
+def admin_menu(is_owner: bool = False) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="📊 آمار", callback_data=AdminCB(action="stats"))
     kb.button(text="🧾 سفارش‌های در انتظار", callback_data=AdminCB(action="pending_orders"))
@@ -31,6 +36,7 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="📝 اکانت‌های درخواستی", callback_data=AdminCB(action="requested_accounts"))
     kb.button(text="💰 مدیریت قیمت‌ها", callback_data=AdminCB(action="diamond_prices"))
     kb.button(text="💳 مدیریت کارت‌ها", callback_data=AdminCB(action="cards"))
+    kb.button(text="💰 تنظیمات بیعانه", callback_data=AdminCB(action="deposit_settings"))
     kb.button(text="🎟 کدهای تخفیف", callback_data=AdminCB(action="discounts"))
     kb.button(text="🎁 قرعه‌کشی", callback_data=AdminCB(action="lottery"))
     kb.button(text="👛 تنظیم موجودی کاربر", callback_data=AdminCB(action="wallet_adjust"))
@@ -40,7 +46,12 @@ def admin_menu() -> InlineKeyboardMarkup:
     kb.button(text="🎥 مدیریت ویدیوهای آموزشی", callback_data=AdminCB(action="tutorials"))
     kb.button(text="🎨 مدیریت دکمه‌ها", callback_data=AdminCB(action="buttons"))
     kb.button(text="🔒 تنظیم کانال قفل", callback_data=AdminCB(action="channel_lock"))
-    kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 1)
+    # Owner-only: roster management (add/remove/list admins).
+    if is_owner:
+        kb.button(text="👮 مدیریت ادمین‌ها", callback_data=AdminCB(action="admins"))
+        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2)
+    else:
+        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 1)
     return kb.as_markup()
 
 
@@ -48,7 +59,10 @@ def admin_menu() -> InlineKeyboardMarkup:
 @router.message(F.text == "/admin", IsAdmin())
 async def admin_home(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("🛠 <b>پنل مدیریت</b>\nیک گزینه را انتخاب کنید:", reply_markup=admin_menu())
+    await message.answer(
+        "🛠 <b>پنل مدیریت</b>\nیک گزینه را انتخاب کنید:",
+        reply_markup=admin_menu(_is_owner(message.from_user.id)),
+    )
 
 
 @router.callback_query(AdminCB.filter(F.action == "stats"), IsAdmin())
@@ -67,7 +81,9 @@ async def stats(callback: CallbackQuery, services: Services) -> None:
         f"💰 درآمد کل: {format_toman(revenue)}\n"
         f"🛒 اکانت‌های موجود: {available_accounts}"
     )
-    await callback.message.edit_text(text, reply_markup=admin_menu())
+    await callback.message.edit_text(
+        text, reply_markup=admin_menu(_is_owner(callback.from_user.id))
+    )
     await callback.answer()
 
 
@@ -77,7 +93,7 @@ async def back_home(callback: CallbackQuery, state: FSMContext) -> None:
     await edit_or_answer(
         callback.message,
         "🛠 <b>پنل مدیریت</b>\nیک گزینه را انتخاب کنید:",
-        reply_markup=admin_menu(),
+        reply_markup=admin_menu(_is_owner(callback.from_user.id)),
     )
     await callback.answer()
 
@@ -167,7 +183,7 @@ async def referral_reward_save(
     await state.clear()
     await message.answer(
         f"✅ پاداش زیرمجموعه‌گیری به {format_toman(amount)} تغییر یافت.",
-        reply_markup=admin_menu(),
+        reply_markup=admin_menu(_is_owner(message.from_user.id)),
     )
 
 

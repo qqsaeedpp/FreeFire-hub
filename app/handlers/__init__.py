@@ -5,10 +5,12 @@ from aiogram import Dispatcher
 
 from app.handlers import account_form
 from app.handlers.admin import accounts as admin_accounts
+from app.handlers.admin import admins as admin_admins
 from app.handlers.admin import broadcast as admin_broadcast
 from app.handlers.admin import buttons as admin_buttons
 from app.handlers.admin import cards as admin_cards
 from app.handlers.admin import channel_lock as admin_channel_lock
+from app.handlers.admin import deposit as admin_deposit
 from app.handlers.admin import discounts as admin_discounts
 from app.handlers.admin import lottery as admin_lottery
 from app.handlers.admin import orders as admin_orders
@@ -45,6 +47,8 @@ def register_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_tutorials.router)
     dp.include_router(admin_buttons.router)
     dp.include_router(admin_channel_lock.router)
+    dp.include_router(admin_deposit.router)
+    dp.include_router(admin_admins.router)
 
     dp.include_router(support_tickets.router)
 

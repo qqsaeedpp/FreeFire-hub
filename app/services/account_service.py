@@ -144,10 +144,16 @@ class AccountService:
         return await self.sale_requests.add(req)
 
     # ---- user requests the shop to find an account ----
-    async def create_requested_account(self, user_id: int, **fields) -> RequestedAccount:
+    async def create_requested_account(
+        self, user_id: int, *, deposit_amount: int | None = None, **fields
+    ) -> RequestedAccount:
+        # ``deposit_amount`` comes from the admin-managed deposit settings; fall
+        # back to the env seed only when the caller doesn't supply one.
+        if deposit_amount is None:
+            deposit_amount = settings.requested_account_deposit
         req = RequestedAccount(
             user_id=user_id,
-            deposit_amount=settings.requested_account_deposit,
+            deposit_amount=deposit_amount,
             **fields,
         )
         return await self.requested.add(req)

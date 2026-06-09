@@ -15,7 +15,7 @@ from app.core.database import Base
 # Import every model so Base.metadata is fully populated for autogenerate.
 from app.models import (  # noqa: F401
     user, order, account, payment, wallet, ticket, referral, admin_log,
-    locked_channel,
+    locked_channel, deposit_setting, admin,
 )
 
 config = context.config

@@ -81,6 +81,20 @@ class ChannelLockFlow(StatesGroup):
     entering_channel = State()
 
 
+class DepositSettingsFlow(StatesGroup):
+    """Edit a deposit setting (amount / card number / card holder)."""
+
+    entering_amount = State()
+    entering_card_number = State()
+    entering_card_holder = State()
+
+
+class AdminManageFlow(StatesGroup):
+    """Capture a numeric user id to grant admin access."""
+
+    entering_user = State()
+
+
 class ButtonEditFlow(StatesGroup):
     """Capture a new text / emoji (normal or premium) for an editable main button."""
 

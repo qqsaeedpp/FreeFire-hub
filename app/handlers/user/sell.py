@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
 from app.core.config import settings
+from app.core.constants import DepositType
 from app.keyboards.callbacks import AccountCB
 from app.keyboards.inline import cancel_only, requested_deposit_review
 from app.keyboards.reply import build_main_menu
@@ -33,13 +34,22 @@ router = Router(name="user_sell")
 
 
 @router.callback_query(AccountCB.filter(F.action == "requested"))
-async def req_entry(callback: CallbackQuery, state: FSMContext) -> None:
+async def req_entry(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    setting = await services.deposit.get_or_seed(DepositType.ACCOUNT_REQUEST)
+    await services.commit()
     await state.set_state(RequestedAccountFlow.entering_price)
+    await state.update_data(
+        deposit_amount=setting.amount,
+        deposit_card_number=setting.card_number,
+        deposit_card_holder=setting.card_holder,
+    )
     await edit_or_answer(
         callback.message,
         "📝 <b>ثبت اکانت درخواستی</b>\n"
         f"توجه: برای ثبت سفارش، بیعانه‌ای معادل "
-        f"<b>{format_toman(settings.requested_account_deposit)}</b> دریافت می‌شود.\n\n"
+        f"<b>{format_toman(setting.amount)}</b> دریافت می‌شود.\n\n"
         "قیمت مدنظر خود را (به تومان) وارد کنید:",
         reply_markup=cancel_only(),
     )
@@ -66,9 +76,11 @@ async def req_price(message: Message, state: FSMContext) -> None:
 async def req_description(message: Message, state: FSMContext) -> None:
     await state.update_data(description=message.text.strip())
     await state.set_state(RequestedAccountFlow.awaiting_deposit_receipt)
+    data = await state.get_data()
     await message.answer(
-        f"💳 لطفاً بیعانه <b>{format_toman(settings.requested_account_deposit)}</b> را به کارت زیر واریز کنید:\n"
-        f"<code>{settings.card_number}</code>\nبه نام: <b>{settings.card_holder}</b>\n\n"
+        f"💳 لطفاً بیعانه <b>{format_toman(data['deposit_amount'])}</b> را به کارت زیر واریز کنید:\n"
+        f"<code>{data['deposit_card_number'] or '—'}</code>\n"
+        f"به نام: <b>{data['deposit_card_holder'] or '—'}</b>\n\n"
         "سپس تصویر رسید را ارسال کنید. 📸",
         reply_markup=cancel_only(),
     )
@@ -80,8 +92,10 @@ async def req_deposit(
 ) -> None:
     data = await state.get_data()
     file_id = message.photo[-1].file_id
+    deposit_amount = data.get("deposit_amount", 0)
     req = await services.account.create_requested_account(
         db_user.id,
+        deposit_amount=deposit_amount,
         target_price=data["price"],
         description=data["description"],
         deposit_paid=True,
@@ -99,7 +113,7 @@ async def req_deposit(
         f"کاربر: {user_ref(db_user)}\n"
         f"قیمت مدنظر: {format_toman(data['price'])}\n"
         f"توضیحات: {data['description']}\n"
-        f"بیعانه: {format_toman(settings.requested_account_deposit)} (پرداخت شد)\n\n"
+        f"بیعانه: {format_toman(deposit_amount)} (پرداخت شد)\n\n"
         f"فیش بیعانه را بررسی و تایید کنید تا به لیست «اکانت‌های درخواستی» اضافه شود."
     )
     review_kb = requested_deposit_review(req.id)

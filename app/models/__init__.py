@@ -1,8 +1,10 @@
 """SQLAlchemy ORM models."""
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
+from app.models.admin import Admin
 from app.models.admin_log import AdminLog
 from app.models.bot_text import BotText
 from app.models.button_settings import ButtonSettings
+from app.models.deposit_setting import DepositSetting
 from app.models.discount import DiscountCode
 from app.models.locked_channel import LockedChannel
 from app.models.order import AccountOrder, DiamondOrder, Order
@@ -35,4 +37,6 @@ __all__ = [
     "TutorialMedia",
     "AdminLog",
     "LockedChannel",
+    "DepositSetting",
+    "Admin",
 ]

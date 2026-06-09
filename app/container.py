@@ -14,9 +14,11 @@ from app.repositories.accounts import (
     AccountSaleRequestRepository,
     RequestedAccountRepository,
 )
+from app.repositories.admins import AdminRepository
 from app.repositories.bot_texts import BotTextRepository
 from app.repositories.button_settings import ButtonSettingsRepository
 from app.repositories.cards import PaymentCardRepository
+from app.repositories.deposit_settings import DepositSettingRepository
 from app.repositories.discounts import DiscountCodeRepository
 from app.repositories.locked_channels import LockedChannelRepository
 from app.repositories.orders import OrderRepository
@@ -27,9 +29,11 @@ from app.repositories.tutorial_media import TutorialMediaRepository
 from app.repositories.users import UserRepository
 from app.repositories.wallets import WalletRepository
 from app.services.account_service import AccountService
+from app.services.admin_service import AdminService
 from app.services.button_service import ButtonService
 from app.services.card_service import CardService
 from app.services.channel_lock_service import ChannelLockService
+from app.services.deposit_service import DepositService
 from app.services.diamond_service import DiamondService
 from app.services.discount_service import DiscountService
 from app.services.order_service import OrderService
@@ -61,6 +65,8 @@ class Services:
         self.tutorial_repo = TutorialMediaRepository(session)
         self.button_repo = ButtonSettingsRepository(session)
         self.locked_channels_repo = LockedChannelRepository(session)
+        self.deposit_repo = DepositSettingRepository(session)
+        self.admins_repo = AdminRepository(session)
 
         # services
         self.wallet = WalletService(self.wallets_repo)
@@ -83,6 +89,8 @@ class Services:
         self.tutorial = TutorialService(self.tutorial_repo)
         self.button = ButtonService(self.button_repo)
         self.channel = ChannelLockService(self.locked_channels_repo, redis_client)
+        self.deposit = DepositService(self.deposit_repo)
+        self.admin = AdminService(self.admins_repo, self.users, redis_client)
 
     async def commit(self) -> None:
         await self.session.commit()

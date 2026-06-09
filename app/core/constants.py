@@ -50,6 +50,20 @@ class CardPurpose(str, enum.Enum):
     ACCOUNT = "account"
 
 
+class DepositType(str, enum.Enum):
+    """Which flow a configurable deposit (بیعانه) setting belongs to."""
+
+    ACCOUNT_REQUEST = "account_request"   # 🎯 بیعانه اکانت درخواستی
+    ACCOUNT_PURCHASE = "account_purchase"  # 🛒 بیعانه خرید اکانت
+
+
+class AdminRole(str, enum.Enum):
+    """Admin privilege level."""
+
+    OWNER = "owner"   # full access incl. managing other admins
+    ADMIN = "admin"   # management access, cannot manage owners
+
+
 class SaleRequestStatus(str, enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -128,4 +142,14 @@ ACCOUNT_STATUS_FA: dict[str, str] = {
 CARD_PURPOSE_FA: dict[str, str] = {
     CardPurpose.DIAMOND: "💎 کارت فروش جم",
     CardPurpose.ACCOUNT: "🛒 کارت فروش اکانت",
+}
+
+DEPOSIT_TYPE_FA: dict[str, str] = {
+    DepositType.ACCOUNT_REQUEST: "🎯 بیعانه اکانت درخواستی",
+    DepositType.ACCOUNT_PURCHASE: "🛒 بیعانه خرید اکانت",
+}
+
+ADMIN_ROLE_FA: dict[str, str] = {
+    AdminRole.OWNER: "👑 مالک",
+    AdminRole.ADMIN: "🛡 ادمین",
 }
