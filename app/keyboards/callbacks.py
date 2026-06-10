@@ -30,8 +30,12 @@ class AdminOrderCB(CallbackData, prefix="aord"):
     order_id: int = 0
     page: int = 1
     # Which pending list this row belongs to: "diamond" | "account".
-    # Nullable trailing field so an empty segment unpacks cleanly.
     kind: str | None = None
+    # Which status bucket the row belongs to: "review" (UNDER_REVIEW) |
+    # "approved" (APPROVED). Trailing nullable field so older callbacks (and the
+    # notification card, which omits it) still unpack cleanly — a missing/empty
+    # group is treated as "review".
+    group: str | None = None
 
 
 class AdminCB(CallbackData, prefix="adm"):

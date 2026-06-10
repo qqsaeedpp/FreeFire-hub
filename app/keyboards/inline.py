@@ -251,14 +251,14 @@ def _pagination_row(cb_factory, action: str, page: int, total_pages: int):
     return nav
 
 
-def _pagination_row_kind(cb_factory, action: str, page: int, total_pages: int, kind):
-    """Like :func:`_pagination_row`, but threads a ``kind`` through the callback."""
+def _pagination_row_kind(cb_factory, action: str, page: int, total_pages: int, kind, group=None):
+    """Like :func:`_pagination_row`, but threads ``kind`` + ``group`` through."""
     nav = InlineKeyboardBuilder()
     if page > 1:
-        nav.button(text="⬅️ قبلی", callback_data=cb_factory(action=action, page=page - 1, kind=kind))
+        nav.button(text="⬅️ قبلی", callback_data=cb_factory(action=action, page=page - 1, kind=kind, group=group))
     nav.button(text=f"{page}/{total_pages}", callback_data=NavCB(action="noop"))
     if page < total_pages:
-        nav.button(text="بعدی ➡️", callback_data=cb_factory(action=action, page=page + 1, kind=kind))
+        nav.button(text="بعدی ➡️", callback_data=cb_factory(action=action, page=page + 1, kind=kind, group=group))
     return nav
 
 
@@ -436,59 +436,97 @@ def pending_kind_menu() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def pending_status_menu(kind: str) -> InlineKeyboardMarkup:
+    """Chooser shown after picking a kind: review-queue vs. approved orders."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="🟡 سفارشات نیاز به بررسی",
+        callback_data=AdminOrderCB(action="page", page=1, kind=kind, group="review"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.button(
+        text="🟢 سفارشات تایید شده",
+        callback_data=AdminOrderCB(action="page", page=1, kind=kind, group="approved"),
+        **style_kwargs(STYLE_SUCCESS),
+    )
+    kb.button(text="⬅️ بازگشت", callback_data=AdminCB(action="pending_orders"))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
 def pending_orders_menu(
-    orders, page: int, total_pages: int, kind: str | None = None
+    orders, page: int, total_pages: int, kind: str | None = None, group: str | None = None
 ) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for o in orders:
         kb.button(
             text=f"#{o.id} | {format_toman(o.amount)}",
-            callback_data=AdminOrderCB(action="open", order_id=o.id, page=page, kind=kind),
+            callback_data=AdminOrderCB(action="open", order_id=o.id, page=page, kind=kind, group=group),
         )
     kb.adjust(1)
-    kb.attach(_pagination_row_kind(AdminOrderCB, "page", page, total_pages, kind))
+    kb.attach(_pagination_row_kind(AdminOrderCB, "page", page, total_pages, kind, group))
 
     tail = InlineKeyboardBuilder()
+    # Back to this kind's status chooser (review/approved); falls back to the
+    # kind chooser when kind is unknown.
     tail.button(
-        text="⬅️ بازگشت", callback_data=AdminCB(action="pending_orders")
+        text="⬅️ بازگشت", callback_data=AdminCB(action="pending_orders", value=kind)
     )
     kb.attach(tail)
     return kb.as_markup()
 
 
 def pending_order_actions(
-    order_id: int, page: int, kind: str | None = None
+    order_id: int, page: int, kind: str | None = None, group: str | None = None
 ) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ تایید", callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page, kind=kind), **style_kwargs(STYLE_SUCCESS))
-    kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page, kind=kind), **style_kwargs(STYLE_DANGER))
-    kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page, kind=kind), **style_kwargs(STYLE_PRIMARY))
-    kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page, kind=kind))
-    kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page, kind=kind))
-    kb.adjust(2, 1, 1, 1)
+    if group == "approved":
+        # Approved orders only get completed — no re-approve / re-reject here.
+        kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page, kind=kind, group=group), **style_kwargs(STYLE_SUCCESS))
+        kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page, kind=kind, group=group))
+        kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page, kind=kind, group=group))
+        kb.adjust(1, 1, 1)
+    else:
+        kb.button(text="✅ تایید", callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page, kind=kind, group=group), **style_kwargs(STYLE_SUCCESS))
+        kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page, kind=kind, group=group), **style_kwargs(STYLE_DANGER))
+        kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page, kind=kind, group=group))
+        kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page, kind=kind, group=group))
+        kb.adjust(2, 1, 1)
     return kb.as_markup()
 
 
 def order_details_actions(
-    order_id: int, page: int, kind: str | None = None
+    order_id: int, page: int, kind: str | None = None, group: str | None = None
 ) -> InlineKeyboardMarkup:
-    """Actions shown under a full order-details view: approve / reject + back."""
+    """Actions under a full order-details view, scoped to the status bucket."""
     kb = InlineKeyboardBuilder()
-    kb.button(
-        text="✅ تایید",
-        callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page, kind=kind),
-        **style_kwargs(STYLE_SUCCESS),
-    )
-    kb.button(
-        text="❌ رد",
-        callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page, kind=kind),
-        **style_kwargs(STYLE_DANGER),
-    )
-    kb.button(
-        text="⬅️ بازگشت به سفارش",
-        callback_data=AdminOrderCB(action="open", order_id=order_id, page=page, kind=kind),
-    )
-    kb.adjust(2, 1)
+    if group == "approved":
+        kb.button(
+            text="🏁 تکمیل سفارش",
+            callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page, kind=kind, group=group),
+            **style_kwargs(STYLE_SUCCESS),
+        )
+        kb.button(
+            text="⬅️ بازگشت به سفارش",
+            callback_data=AdminOrderCB(action="open", order_id=order_id, page=page, kind=kind, group=group),
+        )
+        kb.adjust(1)
+    else:
+        kb.button(
+            text="✅ تایید",
+            callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page, kind=kind, group=group),
+            **style_kwargs(STYLE_SUCCESS),
+        )
+        kb.button(
+            text="❌ رد",
+            callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page, kind=kind, group=group),
+            **style_kwargs(STYLE_DANGER),
+        )
+        kb.button(
+            text="⬅️ بازگشت به سفارش",
+            callback_data=AdminOrderCB(action="open", order_id=order_id, page=page, kind=kind, group=group),
+        )
+        kb.adjust(2, 1)
     return kb.as_markup()
 
 

@@ -24,6 +24,7 @@ from app.keyboards.inline import (
     pending_kind_menu,
     pending_order_actions,
     pending_orders_menu,
+    pending_status_menu,
 )
 from app.models.user import User
 from app.services.notification_service import NotificationService
@@ -41,38 +42,57 @@ _KIND_TYPES: dict[str, tuple[OrderType, ...]] = {
 }
 _KIND_TITLE = {"diamond": "خرید جم", "account": "خرید اکانت"}
 
+# Each pending-orders kind is split into two status buckets the admin browses
+# separately: the review queue (UNDER_REVIEW) and approved-but-not-yet-completed
+# orders (APPROVED). COMPLETED / REJECTED never appear in either bucket.
+_GROUP_STATUS: dict[str, OrderStatus] = {
+    "review": OrderStatus.UNDER_REVIEW,
+    "approved": OrderStatus.APPROVED,
+}
+_GROUP_TITLE = {"review": "🟡 نیاز به بررسی", "approved": "🟢 تایید‌شده"}
+
 
 def _normalize_kind(kind: str | None) -> str:
     return kind if kind in _KIND_TYPES else "diamond"
 
 
-async def _pending_list_content(services: Services, page: int, kind: str):
-    """Compute (text, markup) for one pending-orders list with a smart page clamp."""
+def _normalize_group(group: str | None) -> str:
+    return group if group in _GROUP_STATUS else "review"
+
+
+async def _pending_list_content(
+    services: Services, page: int, kind: str, group: str | None
+):
+    """Compute (text, markup) for one order list with a smart page clamp."""
     kind = _normalize_kind(kind)
+    group = _normalize_group(group)
     types = _KIND_TYPES[kind]
-    total = await services.orders.count_by_status_and_types(
-        OrderStatus.UNDER_REVIEW, types
-    )
+    status = _GROUP_STATUS[group]
+    total = await services.orders.count_by_status_and_types(status, types)
     total_pages = max(1, (total + _PENDING_PAGE_SIZE - 1) // _PENDING_PAGE_SIZE)
     page = max(1, min(page, total_pages))  # smart-clamp when a page empties out
-    title = _KIND_TITLE[kind]
+    kind_title = _KIND_TITLE[kind]
+    group_title = _GROUP_TITLE[group]
     if total == 0:
         return (
-            f"✅ سفارشی در انتظار بررسی برای «{title}» نیست.",
-            pending_orders_menu([], 1, 1, kind),
+            f"✅ سفارشی در «{group_title} — {kind_title}» وجود ندارد.",
+            pending_orders_menu([], 1, 1, kind, group),
         )
     offset = (page - 1) * _PENDING_PAGE_SIZE
     orders = await services.orders.list_by_status_and_types(
-        OrderStatus.UNDER_REVIEW, types, offset=offset, limit=_PENDING_PAGE_SIZE
+        status, types, offset=offset, limit=_PENDING_PAGE_SIZE
     )
     text = (
-        f"🧾 <b>سفارش‌های در انتظار {title}</b> ({total} سفارش)\nیکی را انتخاب کنید:"
+        f"🧾 <b>سفارش‌های {group_title} — {kind_title}</b> "
+        f"({total} سفارش)\nیکی را انتخاب کنید:"
     )
-    return text, pending_orders_menu(orders, page, total_pages, kind)
+    return text, pending_orders_menu(orders, page, total_pages, kind, group)
 
 
-async def _show_pending(message, services: Services, page: int, kind: str) -> None:
-    text, markup = await _pending_list_content(services, page, kind)
+async def _show_pending(
+    message, services: Services, page: int, kind: str, group: str | None = None
+) -> None:
+    text, markup = await _pending_list_content(services, page, kind, group)
     await edit_or_answer(message, text, reply_markup=markup)
 
 
@@ -120,10 +140,16 @@ async def pending_orders(
     bot,
 ) -> None:
     await _delete_pending_receipt(bot, callback.message.chat.id, state)
-    # No value → show the chooser (diamond vs account). With a value → open
-    # that specific filtered list.
+    # No value → kind chooser (diamond vs account). With a kind → the status
+    # chooser (review vs approved) for that kind; the lists themselves open via
+    # AdminOrderCB(action="page", group=...).
     if callback_data.value in _KIND_TYPES:
-        await _show_pending(callback.message, services, page=1, kind=callback_data.value)
+        await edit_or_answer(
+            callback.message,
+            f"🧾 <b>سفارش‌های {_KIND_TITLE[callback_data.value]}</b>\n"
+            "کدام دسته را می‌خواهید ببینید؟",
+            reply_markup=pending_status_menu(callback_data.value),
+        )
     else:
         await edit_or_answer(
             callback.message,
@@ -143,7 +169,11 @@ async def pending_page(
 ) -> None:
     await _delete_pending_receipt(bot, callback.message.chat.id, state)
     await _show_pending(
-        callback.message, services, page=callback_data.page, kind=callback_data.kind
+        callback.message,
+        services,
+        page=callback_data.page,
+        kind=callback_data.kind,
+        group=callback_data.group,
     )
     await callback.answer()
 
@@ -164,7 +194,9 @@ async def open_order(
     await _delete_pending_receipt(bot, callback.message.chat.id, state)
     user = await services.users.get(order.user_id)
     caption = _order_caption(order, user)
-    actions = pending_order_actions(order.id, callback_data.page, callback_data.kind)
+    actions = pending_order_actions(
+        order.id, callback_data.page, callback_data.kind, callback_data.group
+    )
     # The list message is edited in place into the order detail (so it can later
     # be refreshed in place); the receipt photo is sent as a separate message.
     await edit_or_answer(callback.message, caption, reply_markup=actions)
@@ -263,7 +295,9 @@ async def order_details(
     lines.append("📷 فیش واریزی: " + ("✅ ضمیمه شده (در پیام جدا)" if has_receipt else "—"))
 
     body = "\n".join(lines)
-    actions = order_details_actions(order.id, callback_data.page, callback_data.kind)
+    actions = order_details_actions(
+        order.id, callback_data.page, callback_data.kind, callback_data.group
+    )
     # Edit the current message in place: text → edit_text, photo card → edit_caption.
     await edit_or_answer(callback.message, body, reply_markup=actions)
 
@@ -304,7 +338,11 @@ async def approve(
     if callback.message.photo is None:
         await _delete_pending_receipt(bot, callback.message.chat.id, state)
         await _show_pending(
-            callback.message, services, page=callback_data.page, kind=callback_data.kind
+            callback.message,
+            services,
+            page=callback_data.page,
+            kind=callback_data.kind,
+            group=callback_data.group,
         )
     else:
         await _refresh(callback, order.id)
@@ -357,7 +395,11 @@ async def complete(
     if callback.message.photo is None:
         await _delete_pending_receipt(bot, callback.message.chat.id, state)
         await _show_pending(
-            callback.message, services, page=callback_data.page, kind=callback_data.kind
+            callback.message,
+            services,
+            page=callback_data.page,
+            kind=callback_data.kind,
+            group=callback_data.group,
         )
     else:
         await _refresh(callback, order.id, completed=True)
@@ -378,6 +420,7 @@ async def reject_start(
             reject_list_msg_id=callback.message.message_id,
             reject_list_page=callback_data.page,
             reject_list_kind=callback_data.kind,
+            reject_list_group=callback_data.group,
         )
     else:
         await state.update_data(
@@ -386,6 +429,7 @@ async def reject_start(
             reject_list_msg_id=None,
             reject_list_page=callback_data.page,
             reject_list_kind=callback_data.kind,
+            reject_list_group=callback_data.group,
         )
     await callback.message.answer(
         f"دلیل رد سفارش #{callback_data.order_id} را بنویسید (یا «-» برای بدون دلیل):"
@@ -432,7 +476,10 @@ async def reject_finish(
     if list_chat_id and list_msg_id:
         await _delete_pending_receipt(bot, list_chat_id, state)
         text, markup = await _pending_list_content(
-            services, data.get("reject_list_page", 1), data.get("reject_list_kind")
+            services,
+            data.get("reject_list_page", 1),
+            data.get("reject_list_kind"),
+            data.get("reject_list_group"),
         )
         try:
             await bot.edit_message_text(
