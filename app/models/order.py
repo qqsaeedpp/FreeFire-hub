@@ -66,7 +66,12 @@ class DiamondOrder(Order):
         Enum(LoginMethod), nullable=True
     )
 
-    __mapper_args__ = {"polymorphic_identity": "diamond"}
+    # "inline" → subclass columns are loaded via an OUTER JOIN in the base query
+    # whenever an Order is loaded polymorphically (session.get(Order, id) or
+    # select(Order)). Without it the subclass columns are deferred and a first
+    # access (e.g. order.login_method) triggers a *synchronous* lazy SELECT,
+    # which raises MissingGreenlet under the async engine.
+    __mapper_args__ = {"polymorphic_identity": "diamond", "polymorphic_load": "inline"}
 
 
 class AccountOrder(Order):
@@ -78,4 +83,5 @@ class AccountOrder(Order):
     account_id: Mapped[int] = mapped_column(BigInteger, index=True)
     delivered_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    __mapper_args__ = {"polymorphic_identity": "account"}
+    # See DiamondOrder: load subclass columns inline to avoid async lazy-loads.
+    __mapper_args__ = {"polymorphic_identity": "account", "polymorphic_load": "inline"}

@@ -11,7 +11,7 @@ emoji on the button label itself — those fields are reserved for future use
 """
 from __future__ import annotations
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -21,7 +21,9 @@ class ButtonSettings(Base):
     __tablename__ = "button_settings"
 
     key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    text: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Text (not String(128)): some buttons carry long multi-line bodies, e.g. the
+    # «راه‌های ارتباطی» contact card. VARCHAR(128) overflowed → MySQL 1406.
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
     emoji: Mapped[str | None] = mapped_column(String(32), nullable=True)
     button_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
