@@ -155,3 +155,14 @@ ADMIN_ROLE_FA: dict[str, str] = {
     AdminRole.OWNER: "👑 مالک",
     AdminRole.ADMIN: "🛡 ادمین",
 }
+
+# Persian labels for the account "save type" (login service) shown in the
+# diamond-with-credentials flow, order summaries and admin panels.
+LOGIN_METHOD_FA: dict[str, str] = {
+    LoginMethod.GUEST: "👤 مهمان",
+    LoginMethod.FACEBOOK: "📘 فیسبوک",
+    LoginMethod.GOOGLE: "🟢 جیمیل",
+    LoginMethod.VK: "🟣 ویکی / VK",
+    LoginMethod.TWITTER: "🐦 توییتر",
+    LoginMethod.APPLE: "🍏 اپل",
+}

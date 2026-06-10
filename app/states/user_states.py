@@ -25,6 +25,7 @@ class DiamondUIDFlow(StatesGroup):
 
 class DiamondAccountFlow(StatesGroup):
     choosing_plan = State()
+    choosing_save_type = State()       # نوع سیو بازی (فیسبوک / VK / جیمیل)
     entering_email = State()          # ایمیل اکانت
     entering_gmail_password = State()  # رمز عبور جیمیل
     entering_backup = State()          # کد بکاپ

@@ -84,6 +84,31 @@ def diamond_method_menu() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def diamond_save_type_menu() -> InlineKeyboardMarkup:
+    """Account-credentials flow: pick the game save service before email."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="📘 فیسبوک",
+        callback_data=DiamondCB(action="save_type", value="facebook"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.button(
+        text="🟣 ویکی / VK",
+        callback_data=DiamondCB(action="save_type", value="vk"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.button(
+        text="🟢 جیمیل",
+        callback_data=DiamondCB(action="save_type", value="google"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.adjust(1)
+    tail = InlineKeyboardBuilder()
+    tail.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
 def diamond_category_menu() -> InlineKeyboardMarkup:
     """Step 2 (UID only): choose between buying gems or a level-up offer."""
     kb = InlineKeyboardBuilder()
@@ -441,6 +466,29 @@ def pending_order_actions(
     kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page, kind=kind))
     kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page, kind=kind))
     kb.adjust(2, 1, 1, 1)
+    return kb.as_markup()
+
+
+def order_details_actions(
+    order_id: int, page: int, kind: str | None = None
+) -> InlineKeyboardMarkup:
+    """Actions shown under a full order-details view: approve / reject + back."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="✅ تایید",
+        callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page, kind=kind),
+        **style_kwargs(STYLE_SUCCESS),
+    )
+    kb.button(
+        text="❌ رد",
+        callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page, kind=kind),
+        **style_kwargs(STYLE_DANGER),
+    )
+    kb.button(
+        text="⬅️ بازگشت به سفارش",
+        callback_data=AdminOrderCB(action="open", order_id=order_id, page=page, kind=kind),
+    )
+    kb.adjust(2, 1)
     return kb.as_markup()
 
 

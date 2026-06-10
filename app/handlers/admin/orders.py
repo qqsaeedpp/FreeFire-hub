@@ -9,6 +9,7 @@ from html import escape
 
 from app.container import Services
 from app.core.constants import (
+    LOGIN_METHOD_FA,
     ORDER_STATUS_FA,
     ORDER_TYPE_FA,
     PAYMENT_METHOD_FA,
@@ -19,6 +20,7 @@ from app.core.security import decrypt
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminOrderCB
 from app.keyboards.inline import (
+    order_details_actions,
     pending_kind_menu,
     pending_order_actions,
     pending_orders_menu,
@@ -86,12 +88,23 @@ async def _delete_pending_receipt(bot, chat_id: int, state: FSMContext) -> None:
         await state.update_data(pending_receipt_msg_id=None)
 
 
+def _save_type_fa(order) -> str | None:
+    """Persian label for a diamond-account order's save type, or None."""
+    method = getattr(order, "login_method", None)
+    if method is None:
+        return None
+    return LOGIN_METHOD_FA.get(method, str(getattr(method, "value", method)))
+
+
 def _order_caption(order, user) -> str:
     method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
+    save_fa = _save_type_fa(order)
+    save_line = f"🎮 نوع سیو: {save_fa}\n" if save_fa else ""
     return (
         f"🧾 <b>سفارش #{order.id}</b>\n"
         f"نوع: {ORDER_TYPE_FA.get(order.order_type, order.order_type)}\n"
         f"کاربر: {user_ref(user)}\n"
+        f"{save_line}"
         f"روش پرداخت: {method_fa}\n"
         f"مبلغ: {format_toman(order.amount)}\n"
         f"وضعیت: {ORDER_STATUS_FA.get(order.status, order.status)}"
@@ -166,29 +179,42 @@ async def open_order(
     await callback.answer()
 
 
+def _fmt_dt(value) -> str:
+    """Format an order timestamp for display, tolerating missing values."""
+    if value is None:
+        return "-"
+    try:
+        return value.strftime("%Y-%m-%d %H:%M")
+    except Exception:  # noqa: BLE001 - unexpected type → fall back to str
+        return str(value)
+
+
 @router.callback_query(AdminOrderCB.filter(F.action == "details"), IsAdmin())
 async def order_details(
-    callback: CallbackQuery, callback_data: AdminOrderCB, services: Services
+    callback: CallbackQuery,
+    callback_data: AdminOrderCB,
+    services: Services,
+    state: FSMContext,
+    bot,
 ) -> None:
+    """Show the full order info (all fields + receipt), edited in place.
+
+    Works for every order type and from either entry point — the in-place
+    pending detail (text message) or the admin notification card (photo). The
+    receipt photo is (re)sent only when it isn't already on screen.
+    """
     order = await services.order.get(callback_data.order_id)
     if order is None:
         await callback.answer("سفارش یافت نشد.", show_alert=True)
         return
     user = await services.users.get(order.user_id)
-    lines = [
-        f"📄 <b>جزئیات سفارش #{order.id}</b>",
-        f"کاربر: {user_ref(user)}",
-        f"نوع: {ORDER_TYPE_FA.get(order.order_type, order.order_type)}",
-        f"مبلغ: {format_toman(order.amount)}",
-        f"وضعیت: {ORDER_STATUS_FA.get(order.status, order.status)}",
-    ]
+    method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
 
     def dec(value: str | None) -> str:
         """Decrypt a stored credential, HTML-escaping the result.
 
         Never raises: a corrupt/legacy ciphertext degrades to «-» instead of
-        crashing the whole details view (which previously made the button look
-        like it "did nothing").
+        crashing the whole details view.
         """
         if not value:
             return "-"
@@ -197,30 +223,58 @@ async def order_details(
         except Exception:  # noqa: BLE001 - bad/legacy ciphertext
             return "-"
 
+    lines = [
+        f"📄 <b>جزئیات سفارش #{order.id}</b>",
+        f"👤 کاربر: {user_ref(user)}",
+        f"🧾 نوع سفارش: {ORDER_TYPE_FA.get(order.order_type, order.order_type)}",
+    ]
+
     if order.order_type in (OrderType.DIAMOND_UID, OrderType.DIAMOND_ACCOUNT):
         diamond = await services.orders.get_diamond(order.id)
         if diamond:
             lines.append(
-                f"پلن: {escape(str(diamond.plan_name or '-'))} ({diamond.diamonds} الماس)"
+                f"💎 پلن: {escape(str(diamond.plan_name or '-'))}"
+                + (f" ({diamond.diamonds} الماس)" if diamond.diamonds else "")
             )
             if order.order_type == OrderType.DIAMOND_UID:
                 lines.append(f"🆔 UID: <code>{escape(str(diamond.uid or '-'))}</code>")
             else:
+                save_fa = _save_type_fa(diamond) or "-"
                 lines += [
-                    f"📧 ایمیل اکانت: <code>{dec(diamond.account_email)}</code>",
-                    f"🔑 رمز جیمیل: <code>{dec(diamond.gmail_password)}</code>",
-                    f"🧩 کد بکاپ: <code>{dec(diamond.backup_code)}</code>",
+                    f"🎮 نوع سیو بازی: {save_fa}",
+                    f"📧 ایمیل / آیدی لاگین: <code>{dec(diamond.account_email)}</code>",
+                    f"🔑 رمز عبور: <code>{dec(diamond.gmail_password)}</code>",
+                    f"🔐 کد بکاپ: <code>{dec(diamond.backup_code)}</code>",
                 ]
     elif order.order_type == OrderType.ACCOUNT_PURCHASE:
         acc_order = await services.orders.get_account_order(order.id)
         if acc_order:
             lines.append(f"🛒 اکانت: #{acc_order.account_id}")
 
+    lines += [
+        f"💰 مبلغ: {format_toman(order.amount)}",
+        f"💳 روش پرداخت: {method_fa}",
+        f"📅 زمان ثبت: {_fmt_dt(order.created_at)}",
+        f"📊 وضعیت: {ORDER_STATUS_FA.get(order.status, order.status)}",
+    ]
+
+    payment = await services.payments.get_by_order_id(order.id)
+    has_receipt = bool(payment and payment.receipt_file_id)
+    lines.append("📷 فیش واریزی: " + ("✅ ضمیمه شده (در پیام جدا)" if has_receipt else "—"))
+
     body = "\n".join(lines)
-    try:
-        await callback.message.answer(body)
-    except Exception:  # noqa: BLE001 - HTML parse fallback → send as plain text
-        await callback.message.answer(body, parse_mode=None)
+    actions = order_details_actions(order.id, callback_data.page, callback_data.kind)
+    # Edit the current message in place: text → edit_text, photo card → edit_caption.
+    await edit_or_answer(callback.message, body, reply_markup=actions)
+
+    # Make sure the receipt photo is visible. If the current message is the photo
+    # card itself, it already shows the receipt; otherwise (re)send it once.
+    if has_receipt and callback.message.photo is None:
+        await _delete_pending_receipt(bot, callback.message.chat.id, state)
+        sent = await callback.message.answer_photo(
+            payment.receipt_file_id, caption=f"🧾 فیش واریزی سفارش #{order.id}"
+        )
+        await state.update_data(pending_receipt_msg_id=sent.message_id)
     await callback.answer()
 
 

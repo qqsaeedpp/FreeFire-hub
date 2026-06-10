@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 
 from redis.asyncio import Redis
 
-from app.core.constants import OrderType
+from app.core.constants import LoginMethod, OrderType
 from app.models.order import DiamondOrder
 from app.repositories.orders import OrderRepository
 
@@ -147,11 +147,12 @@ class DiamondService:
         email: str,
         gmail_password: str | None = None,
         backup_code: str | None = None,
+        login_method: LoginMethod | None = None,
     ) -> DiamondOrder:
         """Create a diamond order paid with account credentials.
 
-        Only three details are collected from the user (each exactly once):
-        account email, gmail password and backup code — all stored encrypted.
+        Collected from the user: the game save type (login service), account
+        email/login id, password and backup code — credentials stored encrypted.
         """
         from app.core.security import encrypt
 
@@ -167,5 +168,6 @@ class DiamondService:
             account_email=enc(email),
             gmail_password=enc(gmail_password),
             backup_code=enc(backup_code),
+            login_method=login_method,
         )
         return await self.orders.add(order)

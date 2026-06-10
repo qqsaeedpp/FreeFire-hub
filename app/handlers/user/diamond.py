@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
 from app.core.config import settings
-from app.core.constants import PAYMENT_METHOD_FA
+from app.core.constants import LOGIN_METHOD_FA, PAYMENT_METHOD_FA, LoginMethod
 from app.keyboards.callbacks import DiamondCB, NavCB, TutorialCB
 from app.keyboards.inline import (
     backup_code_menu,
@@ -17,6 +17,7 @@ from app.keyboards.inline import (
     diamond_levelup_menu,
     diamond_method_menu,
     diamond_plan_menu,
+    diamond_save_type_menu,
 )
 from app.services.diamond_service import (
     CAT_ACCOUNT,
@@ -211,11 +212,11 @@ async def plan_chosen(
     await state.update_data(plan_code=plan.code)
     data = await state.get_data()
     if data.get("method") == "account":
-        await state.set_state(DiamondAccountFlow.entering_email)
+        await state.set_state(DiamondAccountFlow.choosing_save_type)
         await callback.message.edit_text(
             f"پلن: {plan.name} — {format_toman(plan.price)}\n\n"
-            f"📧 ایمیل اکانت را ارسال کنید:",
-            reply_markup=cancel_only(),
+            f"🎮 سیو بازی شما روی کدام سرویس است؟",
+            reply_markup=diamond_save_type_menu(),
         )
     else:
         await state.set_state(DiamondUIDFlow.entering_uid)
@@ -224,6 +225,31 @@ async def plan_chosen(
             f"🆔 لطفاً <b>UID</b> اکانت خود را ارسال کنید:",
             reply_markup=cancel_only(),
         )
+    await callback.answer()
+
+
+@router.callback_query(
+    DiamondAccountFlow.choosing_save_type, DiamondCB.filter(F.action == "save_type")
+)
+async def save_type_chosen(
+    callback: CallbackQuery, callback_data: DiamondCB, services: Services, state: FSMContext
+) -> None:
+    """Store the chosen game save type, then ask for the account email/login id."""
+    try:
+        method = LoginMethod(callback_data.value)
+    except ValueError:
+        await callback.answer("گزینه نامعتبر است.", show_alert=True)
+        return
+    await state.update_data(save_type=method.value)
+    plan = await services.diamond.get_plan((await state.get_data())["plan_code"])
+    save_fa = LOGIN_METHOD_FA.get(method, method.value)
+    await state.set_state(DiamondAccountFlow.entering_email)
+    await callback.message.edit_text(
+        f"پلن: {plan.name} — {format_toman(plan.price)}\n"
+        f"🎮 نوع سیو: {save_fa}\n\n"
+        f"📧 ایمیل / آیدی لاگین اکانت را ارسال کنید:",
+        reply_markup=cancel_only(),
+    )
     await callback.answer()
 
 
@@ -361,22 +387,26 @@ async def acc_backup(
 ) -> None:
     data = await state.get_data()
     plan = await services.diamond.get_plan(data["plan_code"])
+    save_value = data.get("save_type")
+    login_method = LoginMethod(save_value) if save_value else None
     order = await services.diamond.create_account_order(
         db_user.id,
         plan,
         email=data["email"],
         gmail_password=data["gmail_password"],
         backup_code=_optional(message.text),
+        login_method=login_method,
     )
     await services.commit()
     await state.update_data(order_id=order.id)
+    save_fa = LOGIN_METHOD_FA.get(login_method, "-") if login_method else "-"
     await prompt_discount(
         message,
         state,
         order_id=order.id,
         base_amount=plan.price,
         receipt_state=DiamondAccountFlow.awaiting_receipt,
-        prefix="اطلاعات ثبت شد. ✅\n\n",
+        prefix=f"اطلاعات ثبت شد. ✅\n🎮 نوع سیو: {save_fa}\n\n",
     )
 
 
@@ -412,10 +442,18 @@ async def _finalize_receipt(
     from app.keyboards.inline import admin_order_review
 
     method_fa = PAYMENT_METHOD_FA.get(order.payment_method, "-")
+    save_value = data.get("save_type")
+    save_line = ""
+    if save_value:
+        try:
+            save_line = f"🎮 نوع سیو: {LOGIN_METHOD_FA.get(LoginMethod(save_value), '-')}\n"
+        except ValueError:
+            save_line = ""
     caption = (
         f"🆕 <b>سفارش جدید جم</b>\n"
         f"سفارش: #{order.id}\n"
         f"کاربر: {user_ref(db_user)}\n"
+        f"{save_line}"
         f"روش پرداخت: {method_fa}\n"
         f"مبلغ: {format_toman(order.amount)}"
     )
