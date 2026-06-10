@@ -123,6 +123,27 @@ async def approve_topup(
     await callback.message.edit_reply_markup(reply_markup=None)
 
 
+@router.callback_query(AdminCB.filter(F.action == "reject_topup"), IsAdmin())
+async def reject_topup(
+    callback: CallbackQuery, callback_data: AdminCB, services: Services, bot
+) -> None:
+    """Decline a wallet top-up request — nothing is credited; the user is told."""
+    try:
+        user_id_str, amount_str = callback_data.value.split("-")
+        user_id, amount = int(user_id_str), int(amount_str)
+    except (ValueError, AttributeError):
+        await callback.answer("داده نامعتبر.", show_alert=True)
+        return
+    user = await services.users.get(user_id)
+    if user:
+        await NotificationService(bot).notify_user(
+            user.telegram_id,
+            f"❌ درخواست شارژ کیف پول شما به مبلغ {format_toman(amount)} رد شد.",
+        )
+    await callback.answer("شارژ رد شد.")
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+
 # ---- wallet adjust flow ----
 @router.callback_query(AdminCB.filter(F.action == "wallet_adjust"), IsAdmin())
 async def wallet_adjust_start(callback: CallbackQuery, state: FSMContext) -> None:

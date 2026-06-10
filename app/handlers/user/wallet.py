@@ -105,6 +105,11 @@ async def topup_receipt(
         text="✅ تایید شارژ",
         callback_data=AdminCB(action="approve_topup", value=f"{db_user.id}-{amount}"),
     )
+    kb.button(
+        text="❌ رد شارژ",
+        callback_data=AdminCB(action="reject_topup", value=f"{db_user.id}-{amount}"),
+    )
+    kb.adjust(2)
     caption = (
         f"💳 <b>درخواست شارژ کیف پول</b>\n"
         f"کاربر: {user_ref(db_user)}\n"
