@@ -31,7 +31,7 @@ from app.utils.helpers import (
     parse_images,
     safe_answer,
     sale_request_caption,
-    send_album,
+    send_listing_card,
     user_ref,
 )
 from app.utils.validators import parse_price
@@ -186,14 +186,9 @@ async def _notify_admin_new_listing(bot, services: Services, account, seller: Us
     admin_ids = await services.admin.all_admin_ids()
     for admin_id in admin_ids:
         try:
-            if images and await send_album(bot, admin_id, images, caption=caption):
-                await bot.send_message(
-                    admin_id,
-                    f"یک تصمیم برای اکانت #{account.id} بگیرید:",
-                    reply_markup=keyboard,
-                )
-            else:
-                await bot.send_message(admin_id, caption, reply_markup=keyboard)
+            await send_listing_card(
+                bot, admin_id, caption=caption, images=images, keyboard=keyboard
+            )
         except Exception:  # noqa: BLE001 - one admin's failure must not affect others
             continue
     await notifier.log_event(

@@ -203,6 +203,23 @@ def fmt_dt(value) -> str:
         return str(value)
 
 
+async def send_listing_card(bot, chat_id, *, caption, images, keyboard) -> None:
+    """Send a sale-listing card *with its images* followed by the decision buttons.
+
+    Telegram media groups can't carry an inline keyboard, so when there are images
+    the gallery (album) is sent first with the full caption, then a short follow-up
+    message carries the buttons. With no images (or a stale file_id), the caption
+    and buttons are sent together as one text message. Used both for the instant
+    admin notification and the in-panel review detail so they look identical.
+    """
+    if images and await send_album(bot, chat_id, images, caption=caption):
+        await bot.send_message(
+            chat_id, "👇 یک تصمیم برای این اکانت بگیرید:", reply_markup=keyboard
+        )
+    else:
+        await bot.send_message(chat_id, caption, reply_markup=keyboard)
+
+
 def sale_request_caption(account, seller) -> str:
     """Instant new-listing notification body (shared by card + list detail).
 

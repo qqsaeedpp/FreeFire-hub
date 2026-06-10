@@ -30,7 +30,9 @@ from app.utils.helpers import (
     edit_or_answer,
     format_toman,
     paginate_meta,
+    parse_images,
     sale_request_caption,
+    send_listing_card,
 )
 from app.utils.validators import parse_price
 
@@ -126,7 +128,7 @@ async def sale_page(
 
 @router.callback_query(AdminSaleCB.filter(F.action == "open"), IsAdmin())
 async def sale_open(
-    callback: CallbackQuery, callback_data: AdminSaleCB, services: Services
+    callback: CallbackQuery, callback_data: AdminSaleCB, services: Services, bot
 ) -> None:
     page = max(1, callback_data.page)
     account = await services.account.get(callback_data.account_id)
@@ -144,10 +146,16 @@ async def sale_open(
         f"📌 عنوان: {escape(account.title)}\n"
         f"🆔 شناسه: #{account.id}"
     )
-    await edit_or_answer(
-        callback.message, detail, reply_markup=pending_sale_actions(account.id, page)
-    )
     await callback.answer()
+    # Send the account's images alongside the detail + decision buttons, so the
+    # admin sees the photos right in the review section (same card as the notif).
+    await send_listing_card(
+        bot,
+        callback.message.chat.id,
+        caption=detail,
+        images=parse_images(account.images),
+        keyboard=pending_sale_actions(account.id, page),
+    )
 
 
 @router.callback_query(AdminSaleCB.filter(F.action == "buy"), IsAdmin())
