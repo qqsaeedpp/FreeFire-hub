@@ -123,6 +123,15 @@ async def req_deposit(
         )
     except Exception:  # noqa: BLE001
         await notifier.notify_admin(caption, reply_markup=review_kb)
+    # Additive layer: alert every other authorized admin (legacy send above
+    # covered settings.admin_id). Requested-account review flow is unchanged.
+    await notifier.notify_admins(
+        await services.admin.all_admin_ids(),
+        caption,
+        reply_markup=review_kb,
+        photo=file_id,
+        exclude={settings.admin_id},
+    )
     await notifier.log_event(
         "اکانت درخواستی", {"درخواست": f"#{req.id}", "کاربر": user_ref(db_user)}
     )

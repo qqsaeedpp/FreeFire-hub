@@ -67,6 +67,15 @@ class AdminService:
             return True
         return user_id in await self._cached_ids()
 
+    async def all_admin_ids(self) -> set[int]:
+        """Telegram ids of every authorized admin (env owners + panel-added).
+
+        Used by the additive new-order notification layer to fan a copy of the
+        existing admin notification out to *all* admins, without touching the
+        current single-admin send or the Pending-Orders flow.
+        """
+        return set(settings.admin_ids) | await self._cached_ids()
+
     async def get_role(self, user_id: int) -> AdminRole | None:
         if user_id in settings.admin_ids:
             return AdminRole.OWNER

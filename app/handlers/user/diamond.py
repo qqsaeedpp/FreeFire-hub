@@ -467,6 +467,16 @@ async def _finalize_receipt(
     except Exception:  # noqa: BLE001 - admin notification must not break user flow
         await notifier.notify_admin(caption, reply_markup=admin_order_review(order.id))
 
+    # Additive layer: also alert every other authorized admin (the legacy send
+    # above already covered settings.admin_id). Pending Orders is unaffected.
+    await notifier.notify_admins(
+        await services.admin.all_admin_ids(),
+        caption,
+        reply_markup=admin_order_review(order.id),
+        photo=file_id,
+        exclude={settings.admin_id},
+    )
+
     await notifier.log_event(
         "سفارش جم",
         {"سفارش": f"#{order.id}", "کاربر": user_ref(db_user), "مبلغ": format_toman(order.amount)},

@@ -180,6 +180,15 @@ async def account_receipt(
         )
     except Exception:  # noqa: BLE001
         await notifier.notify_admin(caption, reply_markup=admin_order_review(order.id))
+    # Additive layer: alert every other authorized admin (legacy send above
+    # covered settings.admin_id). Does not touch Pending Orders / callbacks.
+    await notifier.notify_admins(
+        await services.admin.all_admin_ids(),
+        caption,
+        reply_markup=admin_order_review(order.id),
+        photo=file_id,
+        exclude={settings.admin_id},
+    )
     await notifier.log_event(
         "خرید اکانت",
         {"سفارش": f"#{order.id}", "اکانت": f"#{data['account_id']}", "کاربر": user_ref(db_user)},

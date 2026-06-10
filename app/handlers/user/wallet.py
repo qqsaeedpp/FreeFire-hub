@@ -117,6 +117,15 @@ async def topup_receipt(
         )
     except Exception:  # noqa: BLE001
         await notifier.notify_admin(caption, reply_markup=kb.as_markup())
+    # Additive layer: alert every other authorized admin (legacy send above
+    # covered settings.admin_id). Top-up approval flow is unchanged.
+    await notifier.notify_admins(
+        await services.admin.all_admin_ids(),
+        caption,
+        reply_markup=kb.as_markup(),
+        photo=file_id,
+        exclude={settings.admin_id},
+    )
     await notifier.log_event(
         "پرداخت", {"نوع": "شارژ کیف پول", "کاربر": user_ref(db_user), "مبلغ": format_toman(amount)}
     )

@@ -1,6 +1,8 @@
 """Notification service — sends event logs to the admin log channel & admin DM."""
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 
@@ -32,6 +34,43 @@ class NotificationService:
             )
         except TelegramAPIError as exc:
             log.warning("admin_notify_failed", error=str(exc))
+
+    async def notify_admins(
+        self,
+        admin_ids: Iterable[int],
+        text: str,
+        reply_markup=None,
+        *,
+        photo: str | None = None,
+        exclude: Iterable[int] = (),
+    ) -> None:
+        """Additive broadcast: send the same notification to every admin.
+
+        This is a *new layer on top of* the existing single-admin send — it does
+        not replace ``notify_admin`` or any current flow. Each recipient is
+        independent; a per-admin failure (blocked bot, stale photo file_id) is
+        swallowed so it never affects the user flow or the other admins. A photo
+        that can't be sent degrades to a text message so the admin still gets the
+        alert. ``exclude`` skips admins already notified by the legacy path
+        (avoids a duplicate for ``settings.admin_id``).
+        """
+        seen = set(exclude)
+        for aid in admin_ids:
+            if aid in seen:
+                continue
+            seen.add(aid)
+            try:
+                if photo:
+                    await self.bot.send_photo(
+                        aid, photo, caption=text, reply_markup=reply_markup
+                    )
+                else:
+                    await self.bot.send_message(aid, text, reply_markup=reply_markup)
+            except TelegramAPIError:
+                try:
+                    await self.bot.send_message(aid, text, reply_markup=reply_markup)
+                except TelegramAPIError as exc:
+                    log.warning("admin_broadcast_failed", admin=aid, error=str(exc))
 
     async def notify_user(self, telegram_id: int, text: str, reply_markup=None) -> None:
         try:

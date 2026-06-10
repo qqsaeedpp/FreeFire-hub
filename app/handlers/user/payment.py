@@ -203,6 +203,14 @@ async def _pay_with_wallet(
         f"مبلغ: {format_toman(charge)}"
     )
     await notifier.notify_admin(caption, reply_markup=admin_order_review(order.id))
+    # Additive layer: alert every other authorized admin (legacy notify_admin
+    # above covered settings.admin_id). Pending Orders / callbacks unchanged.
+    await notifier.notify_admins(
+        await services.admin.all_admin_ids(),
+        caption,
+        reply_markup=admin_order_review(order.id),
+        exclude={settings.admin_id},
+    )
     await notifier.log_event(
         "سفارش جم (کیف پول)",
         {"سفارش": f"#{order.id}", "کاربر": user_ref(db_user), "مبلغ": format_toman(charge)},
