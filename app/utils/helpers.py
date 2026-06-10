@@ -191,3 +191,38 @@ def paginate_meta(total: int, page: int, page_size: int) -> tuple[int, int]:
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = max(1, min(page, total_pages))
     return (page - 1) * page_size, total_pages
+
+
+def fmt_dt(value) -> str:
+    """Format a timestamp as ``YYYY-MM-DD - HH:MM``; tolerate missing values."""
+    if value is None:
+        return "-"
+    try:
+        return value.strftime("%Y-%m-%d - %H:%M")
+    except Exception:  # noqa: BLE001 - unexpected type → fall back to str
+        return str(value)
+
+
+def sale_request_caption(account, seller) -> str:
+    """Instant new-listing notification body (shared by card + list detail).
+
+    Renders the «🔔 درخواست جدید فروش اکانت» layout. User-supplied text is HTML
+    escaped because messages are sent with HTML parse mode.
+    """
+    from html import escape
+
+    lines = [
+        "🔔 <b>درخواست جدید فروش اکانت</b>",
+        "",
+        "👤 <b>کاربر:</b>",
+        user_ref(seller),
+        "",
+        "💰 <b>قیمت پیشنهادی:</b>",
+        format_toman(account.price),
+        "",
+        "📅 <b>زمان ثبت:</b>",
+        fmt_dt(account.created_at),
+    ]
+    if account.description:
+        lines += ["", f"📝 <b>توضیحات:</b> {escape(account.description)}"]
+    return "\n".join(lines)

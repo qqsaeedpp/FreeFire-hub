@@ -77,6 +77,18 @@ class AccountService:
         """
         account.status = AccountStatus.LISTED_FOR_SALE
 
+    async def reject_listing(self, account: Account) -> None:
+        """Admin declines a user-submitted listing; it leaves the review list."""
+        account.status = AccountStatus.REJECTED
+        account.reserved_by_id = None
+
+    async def list_pending_listings(self, *, page: int, page_size: int):
+        """User listings awaiting review — backs the «📦 سفارشات فروش اکانت» list."""
+        offset = (page - 1) * page_size
+        items = await self.accounts.list_pending_review(offset=offset, limit=page_size)
+        total = await self.accounts.count_pending_review()
+        return items, total
+
     # ---- admin sale-account management ----
     async def list_manageable(self, *, page: int, page_size: int):
         offset = (page - 1) * page_size

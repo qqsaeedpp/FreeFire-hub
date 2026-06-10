@@ -34,6 +34,7 @@ def admin_menu(is_owner: bool = False) -> InlineKeyboardMarkup:
     kb.button(text="➕ افزودن اکانت", callback_data=AdminCB(action="add_account"))
     kb.button(text="🗂 مدیریت اکانت‌های فروش", callback_data=AdminCB(action="manage_accounts"))
     kb.button(text="📝 اکانت‌های درخواستی", callback_data=AdminCB(action="requested_accounts"))
+    kb.button(text="📦 سفارشات فروش اکانت کاربران", callback_data=AdminCB(action="sell_requests"))
     kb.button(text="💰 مدیریت قیمت‌ها", callback_data=AdminCB(action="diamond_prices"))
     kb.button(text="💳 مدیریت کارت‌ها", callback_data=AdminCB(action="cards"))
     kb.button(text="💰 تنظیمات بیعانه", callback_data=AdminCB(action="deposit_settings"))
@@ -49,9 +50,9 @@ def admin_menu(is_owner: bool = False) -> InlineKeyboardMarkup:
     # Owner-only: roster management (add/remove/list admins).
     if is_owner:
         kb.button(text="👮 مدیریت ادمین‌ها", callback_data=AdminCB(action="admins"))
-        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2)
+        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2, 1)
     else:
-        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 1)
+        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2)
     return kb.as_markup()
 
 

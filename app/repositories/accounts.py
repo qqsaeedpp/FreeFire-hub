@@ -87,6 +87,27 @@ class AccountRepository(BaseRepository[Account]):
         )
         return int(result.scalar_one())
 
+    async def list_pending_review(
+        self, *, offset: int = 0, limit: int = 5
+    ) -> list[Account]:
+        """User-submitted listings awaiting an admin decision (oldest first)."""
+        result = await self.session.execute(
+            select(Account)
+            .where(Account.status == AccountStatus.PENDING_REVIEW)
+            .order_by(Account.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_pending_review(self) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Account)
+            .where(Account.status == AccountStatus.PENDING_REVIEW)
+        )
+        return int(result.scalar_one())
+
 
 class AccountSaleRequestRepository(BaseRepository[AccountSaleRequest]):
     model = AccountSaleRequest

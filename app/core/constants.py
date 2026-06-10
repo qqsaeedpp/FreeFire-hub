@@ -31,6 +31,7 @@ class AccountStatus(str, enum.Enum):
     SOLD_TO_ADMIN = "sold_to_admin"    # admin bought it directly from the seller
     HIDDEN = "hidden"                  # kept in DB but hidden from the public shop
     DELETED = "deleted"                # soft-deleted; preserved for sales history
+    REJECTED = "rejected"             # user listing an admin declined
 
 
 # Statuses that are shown to buyers in the public shop (and can be reserved).
@@ -140,6 +141,7 @@ ACCOUNT_STATUS_FA: dict[str, str] = {
     AccountStatus.SOLD_TO_ADMIN: "خریداری‌شده توسط ادمین",
     AccountStatus.HIDDEN: "مخفی",
     AccountStatus.DELETED: "حذف‌شده",
+    AccountStatus.REJECTED: "رد شده",
 }
 
 CARD_PURPOSE_FA: dict[str, str] = {

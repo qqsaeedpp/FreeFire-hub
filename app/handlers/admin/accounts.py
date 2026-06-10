@@ -12,20 +12,37 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from html import escape
+
 from app.container import Services
+from app.core.constants import PAGE_SIZE, AccountStatus
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminSaleCB, NavCB
-from app.keyboards.inline import cancel_only
+from app.keyboards.inline import (
+    cancel_only,
+    pending_sale_actions,
+    pending_sales_menu,
+)
 from app.services.diamond_service import CAT_ACCOUNT, CAT_DIAMOND, CAT_LEVELUP
 from app.services.notification_service import NotificationService
 from app.states.admin_states import EditDiamondPrice
-from app.utils.helpers import edit_or_answer, format_toman
+from app.utils.helpers import (
+    edit_or_answer,
+    format_toman,
+    paginate_meta,
+    sale_request_caption,
+)
 from app.utils.validators import parse_price
 
 router = Router(name="admin_accounts")
 
 
 # ===================== ADMIN DECISIONS ON A USER LISTING =====================
+# The decision buttons are SHARED between the instant new-listing notification
+# (``page == 0``) and the «📦 سفارشات فروش اکانت کاربران» review list (``page >= 1``).
+# A PENDING_REVIEW guard makes every action idempotent: once one admin decides,
+# every other open card/list entry for that listing is a no-op + "already handled"
+# alert, and any list still showing it refreshes that listing out of view.
 async def _notify_seller(bot, services: Services, account, text: str) -> None:
     """Best-effort DM to the seller; never breaks the admin flow."""
     if account.seller_user_id is None:
@@ -39,20 +56,114 @@ async def _notify_seller(bot, services: Services, account, text: str) -> None:
         pass
 
 
+async def _show_pending_sales(message, services: Services, page: int) -> None:
+    """Render the review list in place (edit if possible, else answer)."""
+    items, total = await services.account.list_pending_listings(
+        page=page, page_size=PAGE_SIZE
+    )
+    _, total_pages = paginate_meta(total, page, PAGE_SIZE)
+    page = min(max(1, page), total_pages)
+    if not items:
+        await edit_or_answer(
+            message,
+            "📦 <b>سفارشات فروش اکانت کاربران</b>\n\nهیچ درخواست در انتظاری وجود ندارد.",
+            reply_markup=pending_sales_menu([], page, total_pages),
+        )
+        return
+    await edit_or_answer(
+        message,
+        "📦 <b>سفارشات فروش اکانت کاربران</b>\n\n"
+        f"تعداد در انتظار بررسی: {total}\n"
+        "یک مورد را برای بررسی انتخاب کنید:",
+        reply_markup=pending_sales_menu(items, page, total_pages),
+    )
+
+
+async def _load_pending(callback, callback_data: AdminSaleCB, services: Services):
+    """Fetch a still-pending listing, or alert + refresh the list and return None."""
+    account = await services.account.get(callback_data.account_id)
+    if account is None:
+        await callback.answer("اکانت یافت نشد.", show_alert=True)
+        return None
+    if account.status != AccountStatus.PENDING_REVIEW:
+        await callback.answer("این درخواست قبلاً بررسی شده است.", show_alert=True)
+        if callback_data.page >= 1:
+            await _show_pending_sales(callback.message, services, callback_data.page)
+        return None
+    return account
+
+
+async def _after_decision(
+    callback, callback_data: AdminSaleCB, services: Services, confirm_text: str
+) -> None:
+    """Refresh the list in place (from the list) or strip the card (from notif)."""
+    if callback_data.page >= 1:
+        await _show_pending_sales(callback.message, services, callback_data.page)
+    else:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:  # noqa: BLE001 - card may be an album/already edited
+            pass
+        await callback.message.answer(confirm_text)
+
+
+@router.callback_query(AdminCB.filter(F.action == "sell_requests"), IsAdmin())
+async def sell_requests(
+    callback: CallbackQuery, services: Services, state: FSMContext
+) -> None:
+    await state.clear()
+    await _show_pending_sales(callback.message, services, 1)
+    await callback.answer()
+
+
+@router.callback_query(AdminSaleCB.filter(F.action == "page"), IsAdmin())
+async def sale_page(
+    callback: CallbackQuery, callback_data: AdminSaleCB, services: Services
+) -> None:
+    await _show_pending_sales(callback.message, services, max(1, callback_data.page))
+    await callback.answer()
+
+
+@router.callback_query(AdminSaleCB.filter(F.action == "open"), IsAdmin())
+async def sale_open(
+    callback: CallbackQuery, callback_data: AdminSaleCB, services: Services
+) -> None:
+    page = max(1, callback_data.page)
+    account = await services.account.get(callback_data.account_id)
+    if account is None or account.status != AccountStatus.PENDING_REVIEW:
+        await callback.answer("این درخواست دیگر در دسترس نیست.", show_alert=True)
+        await _show_pending_sales(callback.message, services, page)
+        return
+    seller = (
+        await services.users.get(account.seller_user_id)
+        if account.seller_user_id
+        else None
+    )
+    detail = (
+        f"{sale_request_caption(account, seller)}\n\n"
+        f"📌 عنوان: {escape(account.title)}\n"
+        f"🆔 شناسه: #{account.id}"
+    )
+    await edit_or_answer(
+        callback.message, detail, reply_markup=pending_sale_actions(account.id, page)
+    )
+    await callback.answer()
+
+
 @router.callback_query(AdminSaleCB.filter(F.action == "buy"), IsAdmin())
 async def sale_buy(
     callback: CallbackQuery, callback_data: AdminSaleCB, services: Services, bot
 ) -> None:
-    account = await services.account.get(callback_data.account_id)
+    account = await _load_pending(callback, callback_data, services)
     if account is None:
-        await callback.answer("اکانت یافت نشد.", show_alert=True)
         return
     await services.account.buy_from_seller(account)
     await services.commit()
-
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer(
-        f"✅ اکانت #{account.id} توسط شما خریداری شد و در بخش مدیریت ثبت گردید."
+    await _after_decision(
+        callback,
+        callback_data,
+        services,
+        f"✅ اکانت #{account.id} توسط شما خریداری شد و در بخش مدیریت ثبت گردید.",
     )
     await _notify_seller(
         bot,
@@ -70,16 +181,16 @@ async def sale_buy(
 async def sale_list(
     callback: CallbackQuery, callback_data: AdminSaleCB, services: Services, bot
 ) -> None:
-    account = await services.account.get(callback_data.account_id)
+    account = await _load_pending(callback, callback_data, services)
     if account is None:
-        await callback.answer("اکانت یافت نشد.", show_alert=True)
         return
     await services.account.publish_listing(account)
     await services.commit()
-
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer(
-        f"📋 اکانت #{account.id} به فروشگاه اضافه شد و برای همه نمایش داده می‌شود."
+    await _after_decision(
+        callback,
+        callback_data,
+        services,
+        f"📋 اکانت #{account.id} به فروشگاه اضافه شد و برای همه نمایش داده می‌شود.",
     )
     await _notify_seller(
         bot,
@@ -89,6 +200,33 @@ async def sale_list(
     )
     await NotificationService(bot).log_event(
         "انتشار اکانت کاربر", {"اکانت": f"#{account.id}"}
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminSaleCB.filter(F.action == "reject"), IsAdmin())
+async def sale_reject(
+    callback: CallbackQuery, callback_data: AdminSaleCB, services: Services, bot
+) -> None:
+    account = await _load_pending(callback, callback_data, services)
+    if account is None:
+        return
+    await services.account.reject_listing(account)
+    await services.commit()
+    await _after_decision(
+        callback,
+        callback_data,
+        services,
+        f"❌ درخواست فروش اکانت #{account.id} رد شد.",
+    )
+    await _notify_seller(
+        bot,
+        services,
+        account,
+        f"❌ متاسفانه درخواست فروش اکانت شما (#{account.id}) رد شد.",
+    )
+    await NotificationService(bot).log_event(
+        "رد درخواست فروش اکانت", {"اکانت": f"#{account.id}"}
     )
     await callback.answer()
 

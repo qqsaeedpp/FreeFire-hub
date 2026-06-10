@@ -15,7 +15,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
-from app.core.config import settings
 from app.core.constants import AccountStatus
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
@@ -28,10 +27,10 @@ from app.services.notification_service import NotificationService
 from app.states.user_states import AccountFormFlow
 from app.utils.helpers import (
     edit_or_answer,
-    format_toman,
     is_admin_user,
     parse_images,
     safe_answer,
+    sale_request_caption,
     send_album,
     user_ref,
 )
@@ -168,28 +167,35 @@ async def step_login_info(
         f"✅ اکانت شما با شماره #{account.id} ثبت شد و برای بررسی به پشتیبانی ارسال شد.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
-    await _notify_admin_new_listing(bot, account, db_user)
+    await _notify_admin_new_listing(bot, services, account, db_user)
 
 
-async def _notify_admin_new_listing(bot, account, seller: User) -> None:
+async def _notify_admin_new_listing(bot, services: Services, account, seller: User) -> None:
+    """Broadcast the new listing to every authorized admin (instant notification).
+
+    Mirrors the diamond-order notification: each admin gets the «🔔 درخواست جدید
+    فروش اکانت» card with images (album when multiple) plus the shared decision
+    buttons. The buttons reuse :func:`admin_sale_review` so acting here is
+    identical to acting from the «📦 سفارشات فروش اکانت کاربران» list. One admin
+    failing (e.g. blocked the bot) must never break the others or the user flow.
+    """
     notifier = NotificationService(bot)
-    caption = (
-        f"💰 <b>اکانت جدید برای فروش</b> #{account.id}\n"
-        f"فروشنده: {user_ref(seller)}\n"
-        f"عنوان: {account.title}\n"
-        f"قیمت پیشنهادی: {format_toman(account.price)}\n"
-        f"توضیحات: {account.description or '-'}"
-    )
+    caption = sale_request_caption(account, seller)
     images = parse_images(account.images)
-    try:
-        await send_album(bot, settings.admin_id, images, caption=caption)
-        await bot.send_message(
-            settings.admin_id,
-            f"یک تصمیم برای اکانت #{account.id} بگیرید:",
-            reply_markup=admin_sale_review(account.id),
-        )
-    except Exception:  # noqa: BLE001 - admin notification must not break user flow
-        await notifier.notify_admin(caption, reply_markup=admin_sale_review(account.id))
+    keyboard = admin_sale_review(account.id)
+    admin_ids = await services.admin.all_admin_ids()
+    for admin_id in admin_ids:
+        try:
+            if images and await send_album(bot, admin_id, images, caption=caption):
+                await bot.send_message(
+                    admin_id,
+                    f"یک تصمیم برای اکانت #{account.id} بگیرید:",
+                    reply_markup=keyboard,
+                )
+            else:
+                await bot.send_message(admin_id, caption, reply_markup=keyboard)
+        except Exception:  # noqa: BLE001 - one admin's failure must not affect others
+            continue
     await notifier.log_event(
         "فروش اکانت",
         {"اکانت": f"#{account.id}", "فروشنده": user_ref(seller)},

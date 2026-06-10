@@ -54,8 +54,11 @@ class PayMethodCB(CallbackData, prefix="pay"):
 
 
 class AdminSaleCB(CallbackData, prefix="asale"):
-    action: str  # buy | list
-    account_id: int
+    action: str  # buy | list | reject | open | page
+    account_id: int = 0
+    # 0 = acted from the instant-notification card (strip markup + confirm);
+    # >=1 = acted from the «📦 سفارشات فروش اکانت کاربران» list (refresh in place).
+    page: int = 0
 
 
 class DiscountCB(CallbackData, prefix="disc"):

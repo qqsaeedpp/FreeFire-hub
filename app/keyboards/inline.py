@@ -347,17 +347,61 @@ def payment_method_menu(*, can_use_wallet: bool = False) -> InlineKeyboardMarkup
     return kb.as_markup()
 
 
-def admin_sale_review(account_id: int) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
+def _sale_action_buttons(kb: InlineKeyboardBuilder, account_id: int, page: int) -> None:
+    """The three shared sale-decision buttons (notification card + list detail).
+
+    ``page=0`` marks the instant-notification card; ``page>=1`` carries the list
+    page so the handler can refresh «📦 سفارشات فروش اکانت کاربران» in place.
+    """
     kb.button(
-        text="✅ خرید اکانت",
-        callback_data=AdminSaleCB(action="buy", account_id=account_id),
+        text="📋 افزودن به لیست فروش",
+        callback_data=AdminSaleCB(action="list", account_id=account_id, page=page),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    kb.button(
+        text="💰 خرید اکانت توسط ادمین",
+        callback_data=AdminSaleCB(action="buy", account_id=account_id, page=page),
         **style_kwargs(STYLE_SUCCESS),
     )
     kb.button(
-        text="📋 افزودن به لیست فروش",
-        callback_data=AdminSaleCB(action="list", account_id=account_id),
-        **style_kwargs(STYLE_PRIMARY),
+        text="❌ رد درخواست",
+        callback_data=AdminSaleCB(action="reject", account_id=account_id, page=page),
+        **style_kwargs(STYLE_DANGER),
+    )
+
+
+def admin_sale_review(account_id: int) -> InlineKeyboardMarkup:
+    """Buttons under the instant new-listing notification (page=0 sentinel)."""
+    kb = InlineKeyboardBuilder()
+    _sale_action_buttons(kb, account_id, page=0)
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def pending_sales_menu(accounts, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """List of user listings awaiting review — «📦 سفارشات فروش اکانت کاربران»."""
+    kb = InlineKeyboardBuilder()
+    for acc in accounts:
+        kb.button(
+            text=f"#{acc.id} | {acc.title} | {format_toman(acc.price)}",
+            callback_data=AdminSaleCB(action="open", account_id=acc.id, page=page),
+        )
+    kb.adjust(1)
+    kb.attach(_pagination_row(AdminSaleCB, "page", page, total_pages))
+
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def pending_sale_actions(account_id: int, page: int) -> InlineKeyboardMarkup:
+    """Decision buttons for a single listing opened from the review list."""
+    kb = InlineKeyboardBuilder()
+    _sale_action_buttons(kb, account_id, page=max(1, page))
+    kb.button(
+        text="⬅️ بازگشت به لیست",
+        callback_data=AdminSaleCB(action="page", page=max(1, page)),
     )
     kb.adjust(1)
     return kb.as_markup()
