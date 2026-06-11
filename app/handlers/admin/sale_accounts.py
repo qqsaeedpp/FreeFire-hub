@@ -17,19 +17,54 @@ from app.keyboards.inline import (
 )
 from app.models.account import Account
 from app.states.admin_states import AccountEditFlow
-from app.utils.helpers import edit_or_answer, format_toman, paginate_meta
+from app.utils.helpers import (
+    edit_or_answer,
+    fmt_dt,
+    format_toman,
+    paginate_meta,
+    parse_images,
+    send_album,
+)
 from app.utils.validators import parse_price
 
 router = Router(name="admin_sale_accounts")
 
 
 def _detail(acc: Account) -> str:
+    images = parse_images(acc.images)
+    img_line = (
+        f"🖼 تصاویر: {len(images)} عکس"
+        if images
+        else "🖼 ⚠️ برای این اکانت عکسی ثبت نشده است."
+    )
     return (
-        f"🗂 <b>اکانت #{acc.id}</b>\n"
-        f"{acc.title}\n\n"
-        f"💵 قیمت: <b>{format_toman(acc.price)}</b>\n"
-        f"وضعیت: {ACCOUNT_STATUS_FA.get(acc.status, acc.status)}\n\n"
-        f"📝 {acc.description or '-'}"
+        f"🆔 شناسه: <b>#{acc.id}</b>\n"
+        f"📝 عنوان: {acc.title}\n"
+        f"💰 قیمت: <b>{format_toman(acc.price)}</b>\n"
+        f"📊 وضعیت: {ACCOUNT_STATUS_FA.get(acc.status, acc.status)}\n"
+        f"📅 تاریخ ثبت: {fmt_dt(acc.created_at)}\n\n"
+        f"📄 توضیحات:\n{acc.description or '-'}\n\n"
+        f"{img_line}"
+    )
+
+
+async def _send_detail(message, bot, acc: Account, page: int) -> None:
+    """Send an account's images (album) followed by its detail + management buttons.
+
+    A media group can't carry an inline keyboard, so the gallery (all stored
+    images, as a MediaGroup when more than one) goes out first and the detail
+    text — which always states the image count, or the «no images» warning —
+    carries the buttons in a follow-up message. Images live in the account's own
+    ``images`` CSV column, so they always belong to exactly this account.
+    """
+    images = parse_images(acc.images)
+    if images:
+        await send_album(bot, message.chat.id, images)
+    await message.answer(
+        _detail(acc),
+        reply_markup=manage_account_detail_menu(
+            acc.id, page, acc.status == AccountStatus.HIDDEN
+        ),
     )
 
 
@@ -62,19 +97,13 @@ async def manage_page(
 
 @router.callback_query(AdminAccountCB.filter(F.action == "view"), IsAdmin())
 async def manage_view(
-    callback: CallbackQuery, callback_data: AdminAccountCB, services: Services
+    callback: CallbackQuery, callback_data: AdminAccountCB, services: Services, bot
 ) -> None:
     acc = await services.account.get(callback_data.account_id)
     if acc is None:
         await callback.answer("اکانت یافت نشد.", show_alert=True)
         return
-    await edit_or_answer(
-        callback.message,
-        _detail(acc),
-        reply_markup=manage_account_detail_menu(
-            acc.id, callback_data.page, acc.status == AccountStatus.HIDDEN
-        ),
-    )
+    await _send_detail(callback.message, bot, acc, callback_data.page)
     await callback.answer()
 
 
@@ -88,7 +117,14 @@ async def manage_hide(
         return
     await services.account.hide(acc)
     await services.commit()
-    await manage_view(callback, callback_data, services)
+    # Toggle refresh: update the detail message in place (status + button) so the
+    # already-sent image gallery above it isn't re-sent on every hide/unhide.
+    await edit_or_answer(
+        callback.message,
+        _detail(acc),
+        reply_markup=manage_account_detail_menu(acc.id, callback_data.page, True),
+    )
+    await callback.answer("اکانت مخفی شد.")
 
 
 @router.callback_query(AdminAccountCB.filter(F.action == "unhide"), IsAdmin())
@@ -101,7 +137,12 @@ async def manage_unhide(
         return
     await services.account.unhide(acc)
     await services.commit()
-    await manage_view(callback, callback_data, services)
+    await edit_or_answer(
+        callback.message,
+        _detail(acc),
+        reply_markup=manage_account_detail_menu(acc.id, callback_data.page, False),
+    )
+    await callback.answer("اکانت در فروشگاه نمایش داده شد.")
 
 
 @router.callback_query(AdminAccountCB.filter(F.action == "delete"), IsAdmin())
