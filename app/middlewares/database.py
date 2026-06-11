@@ -15,6 +15,25 @@ from app.container import Services
 from app.core.database import get_sessionmaker
 
 
+def _extract_start_payload(event: TelegramObject) -> str | None:
+    """Return the deep-link payload of a ``/start <code>`` message, else None.
+
+    Read here, in the outer DB middleware, so the referral code is captured even
+    when a forced-join channel lock (an inner middleware) blocks the /start
+    before the referral handler ever runs. Only the first whitespace-delimited
+    token after ``/start`` is taken (Telegram deep-link payloads are one token).
+    """
+    message = getattr(event, "message", None)
+    text = getattr(message, "text", None) if message is not None else None
+    if not text:
+        return None
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2 or parts[0].split("@", 1)[0] != "/start":
+        return None
+    rest = parts[1].strip()
+    return rest.split(maxsplit=1)[0] if rest else None
+
+
 class DatabaseMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -32,6 +51,7 @@ class DatabaseMiddleware(BaseMiddleware):
                     tg_user.id,
                     username=tg_user.username,
                     full_name=tg_user.full_name,
+                    start_referral_code=_extract_start_payload(event),
                 )
                 await session.flush()
                 data["db_user"] = user

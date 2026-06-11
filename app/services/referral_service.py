@@ -16,10 +16,17 @@ _REWARD_KEY = "referral:reward"
 
 
 class ReferralResult:
-    def __init__(self, rewarded: bool, referrer_telegram_id: int | None, amount: int):
+    def __init__(
+        self,
+        rewarded: bool,
+        referrer_telegram_id: int | None,
+        amount: int,
+        referrer_username: str | None = None,
+    ):
         self.rewarded = rewarded
         self.referrer_telegram_id = referrer_telegram_id
         self.amount = amount
+        self.referrer_username = referrer_username
 
 
 class ReferralService:
@@ -81,9 +88,27 @@ class ReferralService:
             referrer.id,
             amount,
             TransactionType.REFERRAL_REWARD,
-            description=f"پاداش دعوت کاربر {new_user.telegram_id}",
+            description="پاداش دعوت کاربر جدید",
         )
-        return ReferralResult(True, referrer.telegram_id, amount)
+        return ReferralResult(True, referrer.telegram_id, amount, referrer.username)
+
+    async def process_pending(self, user: User) -> ReferralResult:
+        """Reward a referral that was captured at /start but couldn't be paid yet.
+
+        ``pending_referral_code`` is set (for new users only) by
+        :meth:`UserService.get_or_create`. This consumes it — clearing it first so
+        it can never be processed twice or retried on a bad code — and pays the
+        referrer via :meth:`link_and_reward`, whose own anti-abuse guards (referrer
+        exists, no self-invite, invitee referred at most once) still apply. If the
+        user already has a referrer, nothing happens.
+        """
+        code = user.pending_referral_code
+        if not code:
+            return ReferralResult(False, None, 0)
+        user.pending_referral_code = None
+        if user.referred_by_id is not None:
+            return ReferralResult(False, None, 0)
+        return await self.link_and_reward(user, code)
 
     async def stats(self, user: User) -> dict[str, int]:
         total = await self.referrals.count_by_referrer(user.id)

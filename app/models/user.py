@@ -26,6 +26,11 @@ class User(Base):
 
     referral_code: Mapped[str] = mapped_column(String(16), unique=True, index=True)
     referred_by_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Deep-link referral code captured at first /start, held until it can be
+    # rewarded. Needed because a forced-join channel lock can intercept the very
+    # first /start (consuming the deep-link payload) before the referral handler
+    # runs; this lets the reward fire once the user finally passes the gate.
+    pending_referral_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False)

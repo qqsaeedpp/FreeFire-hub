@@ -11,7 +11,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from app.container import Services
-from app.handlers.user.common import _is_admin, _send_welcome
+from app.handlers.user.common import (
+    _is_admin,
+    _send_welcome,
+    process_pending_referral,
+)
 from app.keyboards.callbacks import ChannelCB
 from app.models.user import User
 
@@ -32,6 +36,9 @@ async def recheck_membership(
         await services.channel.clear_cache(callback.from_user.id)
         await state.clear()
         await callback.answer("✅ عضویت تایید شد.")
+        # First /start <code> was intercepted by the lock; now that the user has
+        # joined, pay out the referral captured at that moment.
+        await process_pending_referral(services, bot, db_user)
         await _send_welcome(
             callback.message, services, _is_admin(db_user, callback.from_user.id)
         )

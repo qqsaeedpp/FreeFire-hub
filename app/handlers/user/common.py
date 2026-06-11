@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandObject, CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -20,7 +20,6 @@ from app.utils.helpers import (
     edit_or_answer,
     format_toman,
     safe_answer,
-    user_ref,
 )
 
 router = Router(name="user_common")
@@ -43,42 +42,63 @@ async def _send_welcome(message: Message, services: Services, is_admin: bool) ->
         await safe_answer(message, text, reply_markup=markup)
 
 
+async def process_pending_referral(services: Services, bot, invitee: User) -> None:
+    """Pay out a referral captured at /start, once the invitee is past any gate.
+
+    Safe to call from every post-/start entry point (deep-link start, plain
+    start, or the «✅ عضو شدم» channel-join check): it no-ops unless the invitee
+    has a pending referral code and no referrer yet. On a payout it commits the
+    credit *before* announcing it, then DMs the referrer and notifies the admins.
+    """
+    result = await services.referral.process_pending(invitee)
+    if not result.rewarded:
+        return
+    await services.commit()
+    notifier = NotificationService(bot)
+    invitee_handle = f"@{invitee.username}" if invitee.username else "بدون یوزرنیم"
+    if result.referrer_telegram_id:
+        await notifier.notify_user(
+            result.referrer_telegram_id,
+            "🎉 یک زیرمجموعه جدید به لیست شما اضافه شد.\n"
+            f"💰 {format_toman(result.amount)} به کیف پول شما اضافه شد.\n"
+            "👤 کاربر:\n"
+            f"{invitee_handle}",
+        )
+    referrer_handle = (
+        f"@{result.referrer_username}" if result.referrer_username else "بدون یوزرنیم"
+    )
+    await notifier.notify_admins(
+        await services.admin.all_admin_ids(),
+        "👥 زیرمجموعه جدید ثبت شد.\n"
+        "دعوت‌کننده:\n"
+        f"{referrer_handle}\n"
+        "کاربر جدید:\n"
+        f"{invitee_handle}",
+    )
+    await notifier.log_event(
+        "زیرمجموعه جدید",
+        {
+            "دعوت‌کننده": referrer_handle,
+            "کاربر جدید": invitee_handle,
+            "پاداش": format_toman(result.amount),
+        },
+    )
+
+
 @router.message(CommandStart(deep_link=True))
 async def start_with_ref(
     message: Message,
-    command: CommandObject,
     services: Services,
     db_user: User,
     state: FSMContext,
     bot,
-    db_user_created: bool = False,
 ) -> None:
     await state.clear()
-    ref = (command.args or "").strip()
-    # Reward a referral only for a genuinely NEW user opening the link, and only
-    # when they have no referrer yet and aren't self-referring. A repeat /start
-    # (db_user_created is False) can never re-trigger a payout.
-    if (
-        db_user_created
-        and ref
-        and db_user.referred_by_id is None
-        and ref != db_user.referral_code
-    ):
-        result = await services.referral.link_and_reward(db_user, ref)
-        await services.commit()
-        if result.rewarded:
-            notifier = NotificationService(bot)
-            if result.referrer_telegram_id:
-                await notifier.notify_user(
-                    result.referrer_telegram_id,
-                    f"🎁 یک زیرمجموعه جدید از طریق لینک شما عضو شد!\n"
-                    f"مبلغ {format_toman(result.amount)} به کیف پول شما اضافه شد.",
-                )
-            await notifier.log_event(
-                "زیرمجموعه جدید",
-                {"کاربر": user_ref(db_user), "کد معرف": ref,
-                 "پاداش": format_toman(result.amount)},
-            )
+    # The deep-link payload was captured into pending_referral_code by the DB
+    # middleware (new users only); pay it out now that we're past any gate. The
+    # anti-abuse guards live in ReferralService (referred only once, no self-
+    # invite, never re-pays a user who already has a referrer).
+    await process_pending_referral(services, bot, db_user)
     await _send_welcome(message, services, _is_admin(db_user, message.from_user.id))
 
 
@@ -92,6 +112,9 @@ async def start(
     db_user_created: bool = False,
 ) -> None:
     await state.clear()
+    # A user gated on their first /start <code> still carries the pending code;
+    # a plain /start after they join is another chance to pay it out.
+    await process_pending_referral(services, bot, db_user)
     await _send_welcome(message, services, _is_admin(db_user, message.from_user.id))
     if db_user_created:
         await NotificationService(bot).log_event(
