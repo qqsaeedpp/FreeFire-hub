@@ -21,6 +21,7 @@ from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import admin_sale_review, cancel_only
 from app.keyboards.reply import build_main_menu
 from app.filters.buttons import MainBtn
+from app.services.account_service import is_account_visible_for_users
 from app.services.button_service import BTN_KEY_SELL_ACCOUNT
 from app.models.user import User
 from app.services.notification_service import NotificationService
@@ -117,13 +118,23 @@ async def step_image(message: Message, state: FSMContext) -> None:
 
 
 @router.message(AccountFormFlow.images, F.text == "/done")
-async def step_images_done(message: Message, state: FSMContext) -> None:
-    await state.set_state(AccountFormFlow.save_info)
-    await message.answer(
-        "💾 اطلاعات سیو اکانت را وارد کنید (رمزنگاری‌شده ذخیره می‌شود).\n"
-        "اگر ندارید «-» بفرستید.",
-        reply_markup=cancel_only(),
-    )
+async def step_images_done(
+    message: Message, services: Services, state: FSMContext, db_user: User, bot
+) -> None:
+    data = await state.get_data()
+    # Only the admin path collects the (encrypted) save/login credentials the shop
+    # will deliver after a sale. A user selling their own account is never asked
+    # for a password or login info here — that's arranged with the admin outside
+    # this flow after agreement — so the user listing is finalized right away.
+    if data.get("mode") == "admin":
+        await state.set_state(AccountFormFlow.save_info)
+        await message.answer(
+            "💾 اطلاعات سیو اکانت را وارد کنید (رمزنگاری‌شده ذخیره می‌شود).\n"
+            "اگر ندارید «-» بفرستید.",
+            reply_markup=cancel_only(),
+        )
+        return
+    await _finalize_listing(message, services, state, db_user, bot)
 
 
 @router.message(AccountFormFlow.save_info, F.text)
@@ -142,6 +153,19 @@ async def step_login_info(
     message: Message, services: Services, state: FSMContext, db_user: User, bot
 ) -> None:
     await state.update_data(login_info=_opt(message.text))
+    await _finalize_listing(message, services, state, db_user, bot)
+
+
+async def _finalize_listing(
+    message: Message, services: Services, state: FSMContext, db_user: User, bot
+) -> None:
+    """Create the ``Account`` row and notify/ack, shared by both finish points.
+
+    Admin finishes after the credential steps (``credentials``/``save_info`` set);
+    the user finishes right after the images step (both stay ``None``). The status
+    differs — admin listings go live (``AVAILABLE``), user listings wait for review
+    (``PENDING_REVIEW``).
+    """
     data = await state.get_data()
     is_admin = data.get("mode") == "admin"
 
@@ -159,7 +183,18 @@ async def step_login_info(
     await state.clear()
 
     if is_admin:
-        await message.answer(f"✅ اکانت #{account.id} ثبت و در فروشگاه منتشر شد.")
+        # Confirm exactly whether the new listing is buyer-visible, using the same
+        # predicate the shop query honors — so the admin is never left guessing why
+        # an account did or didn't reach the buy-account list.
+        if is_account_visible_for_users(account):
+            await message.answer(
+                f"✅ اکانت #{account.id} با موفقیت ثبت شد و در لیست خرید کاربران قابل مشاهده است."
+            )
+        else:
+            await message.answer(
+                f"⚠️ اکانت #{account.id} ثبت شد اما به دلیل نداشتن قیمت معتبر "
+                "در لیست کاربران نمایش داده نمی‌شود."
+            )
         return
 
     await safe_answer(

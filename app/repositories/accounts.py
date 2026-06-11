@@ -32,7 +32,8 @@ class AccountRepository(BaseRepository[Account]):
         max_price: int | None = None,
         query: str | None = None,
     ) -> list[Account]:
-        conditions = [Account.status.in_(SHOP_VISIBLE_STATUSES)]
+        # Mirrors ``is_account_visible_for_users``: shop-visible status + valid price.
+        conditions = [Account.status.in_(SHOP_VISIBLE_STATUSES), Account.price > 0]
         if min_price is not None:
             conditions.append(Account.price >= min_price)
         if max_price is not None:
@@ -55,7 +56,8 @@ class AccountRepository(BaseRepository[Account]):
         max_price: int | None = None,
         query: str | None = None,
     ) -> int:
-        conditions = [Account.status.in_(SHOP_VISIBLE_STATUSES)]
+        # Mirrors ``is_account_visible_for_users``: shop-visible status + valid price.
+        conditions = [Account.status.in_(SHOP_VISIBLE_STATUSES), Account.price > 0]
         if min_price is not None:
             conditions.append(Account.price >= min_price)
         if max_price is not None:

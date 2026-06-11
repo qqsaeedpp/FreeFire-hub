@@ -23,6 +23,18 @@ class AccountReservationError(Exception):
     """Raised when an account can no longer be reserved (already taken)."""
 
 
+def is_account_visible_for_users(account: Account) -> bool:
+    """Single source of truth for «is this account shown in the buy-account list?».
+
+    An account is buyer-visible iff its status is one the public shop lists
+    (:data:`SHOP_VISIBLE_STATUSES`) *and* it carries a valid (positive) price.
+    The shop query (:meth:`AccountRepository.list_available`) mirrors exactly this
+    rule, and the admin add-account / management screens reuse this predicate, so
+    the three sections can never silently disagree about visibility.
+    """
+    return account.status in SHOP_VISIBLE_STATUSES and (account.price or 0) > 0
+
+
 class AccountService:
     def __init__(
         self,
@@ -47,6 +59,11 @@ class AccountService:
 
     async def get(self, account_id: int) -> Account | None:
         return await self.accounts.get(account_id)
+
+    @staticmethod
+    def is_visible_for_users(account: Account) -> bool:
+        """Whether ``account`` currently appears in the user buy-account list."""
+        return is_account_visible_for_users(account)
 
     # ---- create a listing (shared by admin & user sell flows) ----
     async def create_listing(

@@ -32,6 +32,9 @@ BTN_KEY_CONTACT = "contact"
 BTN_KEY_ADMIN = "admin"
 
 # Order of the main menu (admin appended only for admins, handled by the keyboard).
+# Note: «🎧 پشتیبانی» (BTN_KEY_SUPPORT) is intentionally absent — the button is
+# removed from the user menu. Its handler (app.handlers.support.tickets) and the
+# BUTTON_DEFAULTS entry are kept so the support flow itself stays intact.
 MAIN_MENU_KEYS: tuple[str, ...] = (
     BTN_KEY_BUY_DIAMOND,
     BTN_KEY_BUY_ACCOUNT,
@@ -39,7 +42,6 @@ MAIN_MENU_KEYS: tuple[str, ...] = (
     BTN_KEY_WALLET,
     BTN_KEY_REFERRAL,
     BTN_KEY_MY_ORDERS,
-    BTN_KEY_SUPPORT,
     BTN_KEY_CONTACT,
 )
 
@@ -56,7 +58,8 @@ BUTTON_DEFAULTS: dict[str, tuple[str, str]] = {
     BTN_KEY_ADMIN: ("🛠", "پنل مدیریت"),
 }
 
-# Persian display names for the admin button-management section.
+# Persian display names for the admin button-management section. «پشتیبانی» is
+# omitted so the removed support button can't be re-styled/re-enabled from here.
 BUTTON_LABELS: dict[str, str] = {
     BTN_KEY_BUY_DIAMOND: "خرید جم",
     BTN_KEY_BUY_ACCOUNT: "خرید اکانت",
@@ -64,7 +67,6 @@ BUTTON_LABELS: dict[str, str] = {
     BTN_KEY_WALLET: "کیف پول",
     BTN_KEY_REFERRAL: "زیرمجموعه‌گیری",
     BTN_KEY_MY_ORDERS: "سفارش‌های من",
-    BTN_KEY_SUPPORT: "پشتیبانی",
     BTN_KEY_CONTACT: "راه‌های ارتباطی",
     BTN_KEY_ADMIN: "پنل مدیریت",
 }

@@ -37,3 +37,36 @@ class ReferralRepository(BaseRepository[Referral]):
             )
         )
         return int(result.scalar_one())
+
+    async def list_referrers(
+        self, *, offset: int = 0, limit: int = 10
+    ) -> list[tuple[int, int]]:
+        """``(referrer_id, invite_count)`` for everyone with ≥1 invite, busiest first."""
+        result = await self.session.execute(
+            select(Referral.referrer_id, func.count().label("invites"))
+            .group_by(Referral.referrer_id)
+            .order_by(func.count().desc(), Referral.referrer_id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [(int(rid), int(cnt)) for rid, cnt in result.all()]
+
+    async def count_referrers(self) -> int:
+        """Number of distinct users who have invited at least one person."""
+        result = await self.session.execute(
+            select(func.count(func.distinct(Referral.referrer_id)))
+        )
+        return int(result.scalar_one())
+
+    async def list_referred(
+        self, referrer_id: int, *, offset: int = 0, limit: int = 10
+    ) -> list[Referral]:
+        """One referrer's invitee rows, newest first."""
+        result = await self.session.execute(
+            select(Referral)
+            .where(Referral.referrer_id == referrer_id)
+            .order_by(Referral.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())

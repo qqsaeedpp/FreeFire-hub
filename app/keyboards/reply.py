@@ -15,7 +15,6 @@ from app.services.button_service import (
     BTN_KEY_MY_ORDERS,
     BTN_KEY_REFERRAL,
     BTN_KEY_SELL_ACCOUNT,
-    BTN_KEY_SUPPORT,
     BTN_KEY_WALLET,
     BUTTON_DEFAULTS,
     MAIN_MENU_KEYS,
@@ -81,13 +80,12 @@ def main_menu(
     kb.button(text=lbl(BTN_KEY_WALLET))
     kb.button(text=lbl(BTN_KEY_REFERRAL))
     kb.button(text=lbl(BTN_KEY_MY_ORDERS))
-    kb.button(text=lbl(BTN_KEY_SUPPORT))
     kb.button(text=lbl(BTN_KEY_CONTACT))
     if is_admin:
         kb.button(text=lbl(BTN_KEY_ADMIN))
-        kb.adjust(1, 2, 2, 2, 1, 1)
-    else:
         kb.adjust(1, 2, 2, 2, 1)
+    else:
+        kb.adjust(1, 2, 2, 2)
     return kb.as_markup(resize_keyboard=True)
 
 

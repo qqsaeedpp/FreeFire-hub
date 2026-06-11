@@ -16,6 +16,7 @@ from app.keyboards.inline import (
     manage_accounts_menu,
 )
 from app.models.account import Account
+from app.services.account_service import is_account_visible_for_users
 from app.states.admin_states import AccountEditFlow
 from app.utils.helpers import (
     edit_or_answer,
@@ -37,11 +38,17 @@ def _detail(acc: Account) -> str:
         if images
         else "🖼 ⚠️ برای این اکانت عکسی ثبت نشده است."
     )
+    vis_line = (
+        "🛒 نمایش برای کاربران: ✅ قابل مشاهده در فروشگاه"
+        if is_account_visible_for_users(acc)
+        else "🛒 نمایش برای کاربران: ⛔️ نمایش داده نمی‌شود"
+    )
     return (
         f"🆔 شناسه: <b>#{acc.id}</b>\n"
         f"📝 عنوان: {acc.title}\n"
         f"💰 قیمت: <b>{format_toman(acc.price)}</b>\n"
         f"📊 وضعیت: {ACCOUNT_STATUS_FA.get(acc.status, acc.status)}\n"
+        f"{vis_line}\n"
         f"📅 تاریخ ثبت: {fmt_dt(acc.created_at)}\n\n"
         f"📄 توضیحات:\n{acc.description or '-'}\n\n"
         f"{img_line}"

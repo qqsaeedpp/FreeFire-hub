@@ -114,3 +114,32 @@ class ReferralService:
         total = await self.referrals.count_by_referrer(user.id)
         earned = await self.referrals.total_rewarded(user.id)
         return {"invited": total, "earned": earned}
+
+    # ---- admin: invite management ----
+    async def referrers_overview(self, *, page: int, page_size: int):
+        """One page of referrers (busiest first), each resolved to its user object.
+
+        Returns ``(rows, total)`` where each row is ``(user, referrer_id, count)``.
+        ``user`` may be ``None`` if that account was since deleted, so the caller
+        must fall back to the raw id for display.
+        """
+        offset = (page - 1) * page_size
+        pairs = await self.referrals.list_referrers(offset=offset, limit=page_size)
+        total = await self.referrals.count_referrers()
+        rows = [(await self.users.get(rid), rid, count) for rid, count in pairs]
+        return rows, total
+
+    async def referred_detail(self, referrer_id: int, *, page: int, page_size: int):
+        """One page of a referrer's invitees plus header totals.
+
+        Returns ``(rows, total, rewarded_sum)`` where each row is
+        ``(referral, invited_user)``; ``invited_user`` may be ``None`` if deleted.
+        """
+        offset = (page - 1) * page_size
+        refs = await self.referrals.list_referred(
+            referrer_id, offset=offset, limit=page_size
+        )
+        total = await self.referrals.count_by_referrer(referrer_id)
+        rewarded_sum = await self.referrals.total_rewarded(referrer_id)
+        rows = [(r, await self.users.get(r.referred_id)) for r in refs]
+        return rows, total, rewarded_sum

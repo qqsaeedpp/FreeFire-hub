@@ -18,6 +18,7 @@ from app.keyboards.callbacks import (
     AdminAccountCB,
     AdminCB,
     AdminOrderCB,
+    AdminReferrerCB,
     AdminRequestedCB,
     AdminSaleCB,
     DiamondCB,
@@ -642,4 +643,56 @@ def ticket_actions(ticket_id: int, is_admin: bool) -> InlineKeyboardMarkup:
         **style_kwargs(STYLE_DANGER),
     )
     kb.adjust(2)
+    return kb.as_markup()
+
+
+def referrers_menu(rows, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """Glass list of referrers — «👤 @username | 5 دعوت» (or telegram id).
+
+    ``rows`` are ``(user, referrer_id, count)`` tuples; ``user`` may be ``None``
+    (deleted account) → fall back to the raw referrer id so the row still renders.
+    """
+    kb = InlineKeyboardBuilder()
+    for user, referrer_id, count in rows:
+        if user is not None and user.username:
+            handle = f"@{user.username}"
+        elif user is not None:
+            handle = str(user.telegram_id)
+        else:
+            handle = str(referrer_id)
+        kb.button(
+            text=f"👤 {handle} | {count} دعوت",
+            callback_data=AdminReferrerCB(action="view", referrer_id=referrer_id, page=1),
+        )
+    kb.adjust(1)
+    kb.attach(_pagination_row(AdminReferrerCB, "page", page, total_pages))
+
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def referred_detail_menu(
+    referrer_id: int, page: int, total_pages: int
+) -> InlineKeyboardMarkup:
+    """Invitee-list pagination + back, threading ``referrer_id`` through each page."""
+    kb = InlineKeyboardBuilder()
+    nav = InlineKeyboardBuilder()
+    if page > 1:
+        nav.button(
+            text="⬅️ قبلی",
+            callback_data=AdminReferrerCB(action="view", referrer_id=referrer_id, page=page - 1),
+        )
+    nav.button(text=f"{page}/{total_pages}", callback_data=NavCB(action="noop"))
+    if page < total_pages:
+        nav.button(
+            text="بعدی ➡️",
+            callback_data=AdminReferrerCB(action="view", referrer_id=referrer_id, page=page + 1),
+        )
+    kb.attach(nav)
+
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت", callback_data=AdminReferrerCB(action="page", page=1))
+    kb.attach(tail)
     return kb.as_markup()

@@ -117,3 +117,9 @@ class DepositCB(CallbackData, prefix="dep"):
 class AdminMgmtCB(CallbackData, prefix="admgr"):
     action: str  # home | add | remove | confirm_remove
     user_id: int = 0
+
+
+class AdminReferrerCB(CallbackData, prefix="aref"):
+    action: str  # page (referrers list) | view (one referrer's invitees)
+    referrer_id: int = 0
+    page: int = 1
