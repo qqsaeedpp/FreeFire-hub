@@ -20,6 +20,7 @@ from app.container import Services
 from app.core.config import settings
 from app.keyboards.callbacks import ChannelCB
 from app.models.user import User
+from app.utils.helpers import answer_managed
 
 # Callback prefix that must always pass (the re-check button).
 _CHECK_PREFIX = ChannelCB(action="check").pack()
@@ -62,11 +63,16 @@ class ChannelLockMiddleware(BaseMiddleware):
 
         # Blocked: show the lock message and stop processing this update.
         missing = await services.channel.get_missing_channels(bot, tg_user.id)
-        text, markup = services.channel.build_lock_message(missing)
+        prompt, prompt_entities = await services.text.render("channel_lock")
+        text, entities, markup = services.channel.build_lock_message(
+            missing, prompt, prompt_entities
+        )
         if isinstance(inner, CallbackQuery):
             await inner.answer()
             if inner.message is not None:
-                await inner.message.answer(text, reply_markup=markup)
+                await answer_managed(
+                    inner.message, (text, entities), reply_markup=markup
+                )
         else:
-            await inner.answer(text, reply_markup=markup)
+            await answer_managed(inner, (text, entities), reply_markup=markup)
         return None

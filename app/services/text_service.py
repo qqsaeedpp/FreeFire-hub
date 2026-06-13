@@ -28,6 +28,7 @@ TEXT_LABELS: dict[str, str] = {
     "welcome": "پیام خوش‌آمد",
     "diamond_guide": "راهنمای خرید جم",
     "contact": "راه‌های ارتباطی",
+    "channel_lock": "پیام عضویت اجباری",
 }
 
 # Hardcoded HTML defaults used until an admin overrides them.
@@ -47,6 +48,11 @@ TEXT_DEFAULTS: dict[str, str] = {
         "💬 گروه پشتیبانی: @your_group\n"
         "🌐 وبسایت: https://example.com\n\n"
         "این متن از پنل مدیریت قابل ویرایش است."
+    ),
+    "channel_lock": (
+        "🔒 <b>عضویت اجباری</b>\n\n"
+        "برای استفاده از ربات، ابتدا در کانال‌های زیر عضو شوید و سپس روی "
+        "«✅ عضو شدم» بزنید:"
     ),
 }
 

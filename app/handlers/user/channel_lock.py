@@ -18,6 +18,7 @@ from app.handlers.user.common import (
 )
 from app.keyboards.callbacks import ChannelCB
 from app.models.user import User
+from app.utils.helpers import answer_managed
 
 router = Router(name="user_channel_lock")
 
@@ -47,9 +48,12 @@ async def recheck_membership(
     await callback.answer(
         "❌ هنوز عضو همه کانال‌ها نشده‌اید.", show_alert=True
     )
-    text, markup = services.channel.build_lock_message(missing)
+    prompt, prompt_entities = await services.text.render("channel_lock")
+    text, entities, markup = services.channel.build_lock_message(
+        missing, prompt, prompt_entities
+    )
     await callback.message.answer(
         "❌ هنوز عضو همه کانال‌ها نشده‌اید.\n"
         "لطفاً ابتدا در کانال‌های زیر عضو شوید و دوباره روی «عضو شدم» بزنید.",
     )
-    await callback.message.answer(text, reply_markup=markup)
+    await answer_managed(callback.message, (text, entities), reply_markup=markup)

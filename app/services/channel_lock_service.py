@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, MessageEntity
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from redis.asyncio import Redis
 
@@ -206,14 +206,20 @@ class ChannelLockService:
 
     # --------------------------- lock message ---------------------------
     def build_lock_message(
-        self, channels: list[LockedChannel]
-    ) -> tuple[str, InlineKeyboardMarkup]:
-        lines = [
-            "🔒 <b>عضویت اجباری</b>\n",
-            "برای استفاده از ربات، ابتدا در کانال‌های زیر عضو شوید و سپس روی "
-            "«✅ عضو شدم» بزنید:\n",
-        ]
+        self,
+        channels: list[LockedChannel],
+        prompt: str,
+        entities: list[MessageEntity] | None = None,
+    ) -> tuple[str, list[MessageEntity] | None, InlineKeyboardMarkup]:
+        """Build the forced-membership message from an admin-managed ``prompt``.
+
+        ``prompt``/``entities`` come from :meth:`TextService.render` so the admin
+        can edit the heading text (premium emoji included). Channels that have a
+        join link become inline buttons; any without a link are appended to the
+        body by name. Appending *after* the prompt keeps the entity offsets valid.
+        """
         kb = InlineKeyboardBuilder()
+        extra: list[str] = []
         for ch in channels:
             link = ch.invite_link or (
                 f"https://t.me/{ch.username}" if ch.username else None
@@ -223,10 +229,11 @@ class ChannelLockService:
                 kb.button(text=label, url=link)
             else:
                 # No link available — still list the channel by name.
-                lines.append(f"• {ch.title}")
+                extra.append(f"• {ch.title}")
         kb.button(
             text="✅ عضو شدم",
             callback_data=ChannelCB(action="check"),
         )
         kb.adjust(1)
-        return "\n".join(lines), kb.as_markup()
+        text = prompt if not extra else prompt + "\n\n" + "\n".join(extra)
+        return text, entities, kb.as_markup()
