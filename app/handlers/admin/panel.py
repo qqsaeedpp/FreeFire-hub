@@ -48,12 +48,14 @@ def admin_menu(is_owner: bool = False) -> InlineKeyboardMarkup:
     kb.button(text="🎥 مدیریت ویدیوهای آموزشی", callback_data=AdminCB(action="tutorials"))
     kb.button(text="🎨 مدیریت دکمه‌ها", callback_data=AdminCB(action="buttons"))
     kb.button(text="🔒 تنظیم کانال قفل", callback_data=AdminCB(action="channel_lock"))
-    # Owner-only: roster management (add/remove/list admins).
+    kb.button(text="🚫 مدیریت کاربران", callback_data=AdminCB(action="users"))
+    # Owner-only: roster management + backup (sensitive: full-data export).
     if is_owner:
         kb.button(text="👮 مدیریت ادمین‌ها", callback_data=AdminCB(action="admins"))
-        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
+        kb.button(text="💾 تنظیمات بکاپ", callback_data=AdminCB(action="backup"))
+        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
     else:
-        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2, 1)
+        kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
     return kb.as_markup()
 
 

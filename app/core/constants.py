@@ -68,6 +68,22 @@ class AdminRole(str, enum.Enum):
     ADMIN = "admin"   # management access, cannot manage owners
 
 
+class BackupTargetType(str, enum.Enum):
+    """Where automatic/manual database backups are delivered."""
+
+    USER = "user"        # a numeric Telegram user id
+    CHANNEL = "channel"  # a private channel id (-100…)
+
+
+class BackupScheduleType(str, enum.Enum):
+    """How often the automatic backup runs."""
+
+    SIX_HOURS = "6h"
+    TWELVE_HOURS = "12h"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
+
 class SaleRequestStatus(str, enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -156,6 +172,18 @@ DEPOSIT_TYPE_FA: dict[str, str] = {
 ADMIN_ROLE_FA: dict[str, str] = {
     AdminRole.OWNER: "👑 مالک",
     AdminRole.ADMIN: "🛡 ادمین",
+}
+
+BACKUP_TARGET_TYPE_FA: dict[str, str] = {
+    BackupTargetType.USER: "👤 کاربر (آیدی عددی)",
+    BackupTargetType.CHANNEL: "📢 کانال خصوصی",
+}
+
+BACKUP_SCHEDULE_FA: dict[str, str] = {
+    BackupScheduleType.SIX_HOURS: "هر ۶ ساعت",
+    BackupScheduleType.TWELVE_HOURS: "هر ۱۲ ساعت",
+    BackupScheduleType.DAILY: "روزانه",
+    BackupScheduleType.WEEKLY: "هفتگی",
 }
 
 # Persian labels for the account "save type" (login service) shown in the

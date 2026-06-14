@@ -1,17 +1,23 @@
-"""APScheduler background jobs: stale-reservation cleanup and DB backup."""
+"""APScheduler background jobs: stale-reservation cleanup + configurable backup.
+
+The auto-backup job is (re)configured at runtime from the single ``backup_settings``
+row: enabling/disabling it or changing its cadence reschedules the live job
+without a restart (see :func:`apply_backup_schedule`). The actual archive build
+and delivery live in :mod:`app.scheduler.backup`; this module only owns the
+scheduler wiring so the heavy lifting stays testable and off the hot path.
+"""
 from __future__ import annotations
 
-import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.constants import AccountStatus, OrderStatus
+from app.core.constants import AccountStatus, BackupScheduleType, OrderStatus
 from app.core.database import get_sessionmaker
 from app.core.logger import get_logger
 from app.models.account import Account
@@ -22,6 +28,14 @@ BACKUP_DIR = Path("backups")
 BACKUP_DIR.mkdir(exist_ok=True)
 
 RESERVATION_TTL = timedelta(hours=2)
+
+_BACKUP_JOB_ID = "auto_backup"
+
+# Captured once at startup so a reschedule triggered from the admin panel can
+# reach the live scheduler and a bot instance without threading them through
+# every call site.
+_scheduler: AsyncIOScheduler | None = None
+_bot = None
 
 
 async def release_stale_reservations() -> None:
@@ -55,27 +69,64 @@ async def release_stale_reservations() -> None:
             log.info("released_stale_reservations", count=len(stale))
 
 
-def backup_database() -> None:
-    """Dump the MySQL database with mysqldump into the backups directory."""
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out = BACKUP_DIR / f"backup_{stamp}.sql"
-    cmd = [
-        "mysqldump",
-        f"-h{settings.mysql_host}",
-        f"-P{settings.mysql_port}",
-        f"-u{settings.mysql_user}",
-        f"-p{settings.mysql_password}",
-        settings.mysql_database,
-    ]
-    try:
-        with out.open("wb") as fh:
-            subprocess.run(cmd, stdout=fh, stderr=subprocess.PIPE, check=True, timeout=300)
-        log.info("db_backup_created", file=str(out))
-    except Exception as exc:  # noqa: BLE001
-        log.warning("db_backup_failed", error=str(exc))
+def _trigger_for(schedule_type: BackupScheduleType):
+    """Map a configured cadence to an APScheduler trigger."""
+    if schedule_type == BackupScheduleType.SIX_HOURS:
+        return IntervalTrigger(hours=6)
+    if schedule_type == BackupScheduleType.TWELVE_HOURS:
+        return IntervalTrigger(hours=12)
+    if schedule_type == BackupScheduleType.WEEKLY:
+        return CronTrigger(day_of_week="fri", hour=3, minute=0)
+    return CronTrigger(hour=3, minute=0)  # DAILY (default)
 
 
-def setup_scheduler() -> AsyncIOScheduler:
+async def _run_backup_job() -> None:
+    """Scheduler entrypoint — delegate to the orchestrator with the saved bot."""
+    from app.scheduler.backup import run_backup
+
+    if _bot is None:
+        log.warning("auto_backup_no_bot")
+        return
+    await run_backup(_bot)
+
+
+def apply_backup_schedule(
+    schedule_type: BackupScheduleType, is_enabled: bool, bot=None
+) -> None:
+    """(Re)configure the live auto-backup job. No-op if the scheduler isn't running.
+
+    Called at startup with the saved settings and again whenever the admin
+    toggles auto-backup or changes its cadence. Removing the job first means a
+    *disable* truly stops future runs, not just replaces the trigger.
+    """
+    global _bot
+    if bot is not None:
+        _bot = bot
+    if _scheduler is None:
+        return  # scheduler not started yet (e.g. imported in a non-runtime context)
+    if _scheduler.get_job(_BACKUP_JOB_ID):
+        _scheduler.remove_job(_BACKUP_JOB_ID)
+    if not is_enabled:
+        log.info("auto_backup_disabled")
+        return
+    _scheduler.add_job(
+        _run_backup_job,
+        _trigger_for(schedule_type),
+        id=_BACKUP_JOB_ID,
+        replace_existing=True,
+    )
+    log.info("auto_backup_scheduled", schedule=schedule_type.value)
+
+
+def setup_scheduler(bot=None) -> AsyncIOScheduler:
+    """Build the scheduler with the always-on reservation-cleanup job.
+
+    The auto-backup job is added later by :func:`apply_backup_schedule` (called
+    from startup once the saved settings are read), so a disabled backup never
+    registers a job.
+    """
+    global _scheduler, _bot
+    _bot = bot
     scheduler = AsyncIOScheduler(timezone=settings.timezone)
     scheduler.add_job(
         release_stale_reservations,
@@ -83,10 +134,5 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="release_reservations",
         replace_existing=True,
     )
-    scheduler.add_job(
-        backup_database,
-        CronTrigger(hour=3, minute=0),  # daily 03:00
-        id="db_backup",
-        replace_existing=True,
-    )
+    _scheduler = scheduler
     return scheduler

@@ -2,6 +2,8 @@
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
 from app.models.admin import Admin
 from app.models.admin_log import AdminLog
+from app.models.backup_setting import BackupSetting
+from app.models.banned_user import BannedUser
 from app.models.bot_text import BotText
 from app.models.button_settings import ButtonSettings
 from app.models.deposit_setting import DepositSetting
@@ -39,4 +41,6 @@ __all__ = [
     "LockedChannel",
     "DepositSetting",
     "Admin",
+    "BannedUser",
+    "BackupSetting",
 ]

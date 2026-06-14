@@ -123,3 +123,14 @@ class AdminReferrerCB(CallbackData, prefix="aref"):
     action: str  # page (referrers list) | view (one referrer's invitees)
     referrer_id: int = 0
     page: int = 1
+
+
+class UserAdminCB(CallbackData, prefix="usradm"):
+    action: str  # home | ban | unban | confirm_unban | page
+    user_id: int = 0
+    page: int = 1
+
+
+class BackupCB(CallbackData, prefix="bkp"):
+    action: str  # home | manual | toggle | target_user | target_channel | schedule | set_schedule
+    value: str | None = None  # schedule type token for set_schedule

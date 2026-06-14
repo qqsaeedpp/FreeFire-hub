@@ -45,6 +45,27 @@ def build_dispatcher() -> Dispatcher:
     return dp
 
 
+async def _load_backup_schedule(bot: Bot) -> None:
+    """Apply the saved auto-backup cadence to the live scheduler at startup.
+
+    Reads the single ``backup_settings`` row (created disabled on first run) and
+    registers the APScheduler job only if auto-backup is enabled. Never blocks
+    startup — a failure here just means no auto-backup until reconfigured.
+    """
+    from app.container import Services
+    from app.core.database import get_sessionmaker
+    from app.scheduler.tasks import apply_backup_schedule
+
+    try:
+        async with get_sessionmaker()() as session:
+            setting = await Services(session).backup.get()
+            await session.commit()
+            schedule_type, is_enabled = setting.schedule_type, setting.is_enabled
+        apply_backup_schedule(schedule_type, is_enabled, bot)
+    except Exception as exc:  # noqa: BLE001 - startup must never fail on this
+        log.warning("backup_schedule_load_failed", error=str(exc))
+
+
 async def main() -> None:
     configure_logging()
     bot = Bot(
@@ -53,8 +74,9 @@ async def main() -> None:
     )
     dp = build_dispatcher()
 
-    scheduler = setup_scheduler()
+    scheduler = setup_scheduler(bot)
     scheduler.start()
+    await _load_backup_schedule(bot)
 
     # Bot command menu — only «/start».
     await bot.set_my_commands([BotCommand(command="start", description="شروع")])

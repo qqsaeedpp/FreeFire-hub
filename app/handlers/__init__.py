@@ -6,6 +6,7 @@ from aiogram import Dispatcher
 from app.handlers import account_form
 from app.handlers.admin import accounts as admin_accounts
 from app.handlers.admin import admins as admin_admins
+from app.handlers.admin import backup as admin_backup
 from app.handlers.admin import broadcast as admin_broadcast
 from app.handlers.admin import buttons as admin_buttons
 from app.handlers.admin import cards as admin_cards
@@ -20,6 +21,7 @@ from app.handlers.admin import requested_accounts as admin_requested_accounts
 from app.handlers.admin import sale_accounts as admin_sale_accounts
 from app.handlers.admin import texts as admin_texts
 from app.handlers.admin import tutorials as admin_tutorials
+from app.handlers.admin import users as admin_users
 from app.handlers.support import tickets as support_tickets
 from app.handlers.user import account as user_account
 from app.handlers.user import channel_lock as user_channel_lock
@@ -51,6 +53,8 @@ def register_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_channel_lock.router)
     dp.include_router(admin_deposit.router)
     dp.include_router(admin_admins.router)
+    dp.include_router(admin_users.router)
+    dp.include_router(admin_backup.router)
 
     dp.include_router(support_tickets.router)
 

@@ -15,6 +15,8 @@ from app.repositories.accounts import (
     RequestedAccountRepository,
 )
 from app.repositories.admins import AdminRepository
+from app.repositories.backup_settings import BackupSettingRepository
+from app.repositories.banned_users import BannedUserRepository
 from app.repositories.bot_texts import BotTextRepository
 from app.repositories.button_settings import ButtonSettingsRepository
 from app.repositories.cards import PaymentCardRepository
@@ -30,6 +32,8 @@ from app.repositories.users import UserRepository
 from app.repositories.wallets import WalletRepository
 from app.services.account_service import AccountService
 from app.services.admin_service import AdminService
+from app.services.backup_service import BackupService
+from app.services.ban_service import BanService
 from app.services.button_service import ButtonService
 from app.services.card_service import CardService
 from app.services.channel_lock_service import ChannelLockService
@@ -67,6 +71,8 @@ class Services:
         self.locked_channels_repo = LockedChannelRepository(session)
         self.deposit_repo = DepositSettingRepository(session)
         self.admins_repo = AdminRepository(session)
+        self.banned_repo = BannedUserRepository(session)
+        self.backup_repo = BackupSettingRepository(session)
 
         # services
         self.wallet = WalletService(self.wallets_repo)
@@ -91,6 +97,8 @@ class Services:
         self.channel = ChannelLockService(self.locked_channels_repo, redis_client)
         self.deposit = DepositService(self.deposit_repo)
         self.admin = AdminService(self.admins_repo, self.users, redis_client)
+        self.ban = BanService(self.banned_repo, self.users)
+        self.backup = BackupService(self.backup_repo)
 
     async def commit(self) -> None:
         await self.session.commit()

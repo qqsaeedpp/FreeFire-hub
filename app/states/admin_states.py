@@ -95,6 +95,19 @@ class AdminManageFlow(StatesGroup):
     entering_user = State()
 
 
+class UserBanFlow(StatesGroup):
+    """Capture a numeric user id then a ban reason."""
+
+    entering_user = State()
+    entering_reason = State()
+
+
+class BackupTargetFlow(StatesGroup):
+    """Capture the backup destination id (numeric user id or channel id)."""
+
+    entering_target_id = State()
+
+
 class ButtonEditFlow(StatesGroup):
     """Capture a new text / emoji (normal or premium) for an editable main button."""
 
