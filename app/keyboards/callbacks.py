@@ -132,5 +132,7 @@ class UserAdminCB(CallbackData, prefix="usradm"):
 
 
 class BackupCB(CallbackData, prefix="bkp"):
-    action: str  # home | manual | toggle | target_user | target_channel | schedule | set_schedule
+    # home | manual | target_menu | target_user | target_channel | auto_menu |
+    # set_schedule | toggle | restore | restore_confirm | restore_cancel
+    action: str
     value: str | None = None  # schedule type token for set_schedule

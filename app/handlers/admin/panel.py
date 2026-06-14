@@ -52,7 +52,7 @@ def admin_menu(is_owner: bool = False) -> InlineKeyboardMarkup:
     # Owner-only: roster management + backup (sensitive: full-data export).
     if is_owner:
         kb.button(text="👮 مدیریت ادمین‌ها", callback_data=AdminCB(action="admins"))
-        kb.button(text="💾 تنظیمات بکاپ", callback_data=AdminCB(action="backup"))
+        kb.button(text="💾 مدیریت بکاپ", callback_data=AdminCB(action="backup"))
         kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
     else:
         kb.adjust(2, 2, 2, 2, 2, 2, 2, 2, 2, 2)

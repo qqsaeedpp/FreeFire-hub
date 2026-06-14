@@ -7,9 +7,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# System deps: build asyncmy / cryptography + mysql client (mysqldump/mysql) for backups
+# System deps: build asyncmy / cryptography + mysql client (mysqldump/mysql) and
+# zip/unzip for the backup & restore archives.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc default-libmysqlclient-dev default-mysql-client build-essential pkg-config tzdata \
+    && apt-get install -y --no-install-recommends gcc default-libmysqlclient-dev default-mysql-client build-essential pkg-config tzdata zip unzip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

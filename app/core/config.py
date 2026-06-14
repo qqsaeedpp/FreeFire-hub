@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     mysql_user: str = Field("freefire", alias="MYSQL_USER")
     mysql_password: str = Field("", alias="MYSQL_PASSWORD")
     mysql_database: str = Field("freefire_hub", alias="MYSQL_DATABASE")
+    # SSL handshake mode passed to the mysqldump/mysql CLIs. Defaults to DISABLED
+    # because the bot talks to MySQL over the internal Docker network (no TLS),
+    # and an MySQL-8 server with a self-signed cert otherwise rejects the client
+    # with error 2026. Accepts any MySQL ``--ssl-mode`` value (DISABLED/PREFERRED/
+    # REQUIRED/…); the BackupService transparently falls back to the MariaDB-client
+    # ``--ssl=0/1`` syntax when the installed client doesn't understand --ssl-mode.
+    mysql_ssl_mode: str = Field("DISABLED", alias="MYSQL_SSL_MODE")
 
     # --- Redis ---
     redis_host: str = Field("localhost", alias="REDIS_HOST")

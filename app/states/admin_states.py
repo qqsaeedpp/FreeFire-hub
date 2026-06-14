@@ -108,6 +108,13 @@ class BackupTargetFlow(StatesGroup):
     entering_target_id = State()
 
 
+class BackupRestoreFlow(StatesGroup):
+    """Receive a backup ZIP then confirm before the (destructive) restore."""
+
+    awaiting_file = State()
+    confirming = State()
+
+
 class ButtonEditFlow(StatesGroup):
     """Capture a new text / emoji (normal or premium) for an editable main button."""
 

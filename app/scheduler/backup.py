@@ -51,8 +51,12 @@ def _caption(meta: dict) -> str:
     )
 
 
-async def run_backup(bot) -> None:
-    """Create a backup and deliver it to the configured target.
+async def run_backup(bot, requester_id: int | None = None) -> None:
+    """Create a backup and deliver it to the configured target (and requester).
+
+    ``requester_id`` is the admin who pressed «📥 بکاپ دستی»: they receive a copy
+    *at that moment* in addition to the configured destination, so a manual backup
+    always lands in the requesting admin's chat even before a target is set.
 
     Safe to fire-and-forget: the DB session only reads the destination + stats
     (primitive values are extracted before it closes), and the heavy file work
@@ -64,28 +68,48 @@ async def run_backup(bot) -> None:
     async with get_sessionmaker()() as session:
         services = Services(session)
         setting = await services.backup.get()
-        if setting.target_type is None or setting.target_id is None:
-            await _notify_owners(
-                bot, "⚠️ بکاپ انجام نشد: مقصد ارسال تنظیم نشده است."
-            )
-            return
-        target_id = int(setting.target_id)
+        has_target = setting.target_type is not None and setting.target_id is not None
+        target_id = int(setting.target_id) if has_target else None
         meta = await _gather_meta(services, setting)
+
+    # Deduplicated recipient list: configured target first, then the requester.
+    recipients: list[int] = []
+    if target_id is not None:
+        recipients.append(target_id)
+    if requester_id is not None and requester_id not in recipients:
+        recipients.append(requester_id)
+
+    if not recipients:
+        await _notify_owners(bot, "⚠️ بکاپ انجام نشد: مقصد ارسال تنظیم نشده است.")
+        return
 
     # File ops are stateless — a session-less service keeps them off the DB conn.
     backup = BackupService()
     zip_path = None
     try:
         zip_path = await backup.create_backup(meta)
-        await backup.send_backup(bot, zip_path, target_id, caption=_caption(meta))
-        await NotificationService(bot).log_event(
-            "بکاپ دیتابیس ارسال شد",
-            {
-                "مقصد": f"<code>{target_id}</code>",
-                "حجم": f"{zip_path.stat().st_size // 1024} KB",
-            },
-        )
-        log.info("backup_sent", target=target_id)
+        caption = _caption(meta)
+        sent_to: list[int] = []
+        for chat_id in recipients:
+            try:
+                await backup.send_backup(bot, zip_path, chat_id, caption=caption)
+                sent_to.append(chat_id)
+            except BackupError as exc:
+                await _notify_owners(
+                    bot,
+                    f"🛑 ارسال بکاپ به <code>{chat_id}</code> ناموفق بود:\n"
+                    f"<code>{exc}</code>",
+                )
+                log.warning("backup_send_failed", target=chat_id, error=str(exc))
+        if sent_to:
+            await NotificationService(bot).log_event(
+                "بکاپ دیتابیس ارسال شد",
+                {
+                    "مقصدها": ", ".join(f"<code>{c}</code>" for c in sent_to),
+                    "حجم": f"{zip_path.stat().st_size // 1024} KB",
+                },
+            )
+            log.info("backup_sent", targets=sent_to)
     except BackupError as exc:
         await _notify_owners(bot, f"🛑 بکاپ ناموفق بود:\n<code>{exc}</code>")
         log.warning("backup_failed", error=str(exc))
@@ -94,4 +118,4 @@ async def run_backup(bot) -> None:
         log.error("backup_unexpected_error", error=str(exc))
     finally:
         if zip_path is not None:
-            backup.cleanup_backup(zip_path)
+            backup.cleanup_temp_files(zip_path)
