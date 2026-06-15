@@ -14,7 +14,12 @@ class EditReferralReward(StatesGroup):
 
 
 class BroadcastFlow(StatesGroup):
+    # ``choosing_type`` / ``entering_photo`` were added to support photo and
+    # photo+caption broadcasts; ``entering_message`` (text / caption) and
+    # ``confirming`` keep their original meaning so the text-only flow is intact.
+    choosing_type = State()
     entering_message = State()
+    entering_photo = State()
     confirming = State()
 
 

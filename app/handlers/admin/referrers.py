@@ -8,7 +8,14 @@ from app.container import Services
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminReferrerCB
 from app.keyboards.inline import referred_detail_menu, referrers_menu
-from app.utils.helpers import edit_or_answer, fmt_dt, format_toman, paginate_meta
+from app.utils.helpers import (
+    edit_or_answer,
+    fmt_dt,
+    format_toman,
+    format_user_display,
+    paginate_meta,
+    user_profile_link,
+)
 
 router = Router(name="admin_referrers")
 
@@ -20,7 +27,7 @@ def _referred_line(ref, user) -> str:
     if user is not None:
         uid = user.telegram_id
         handle = f"@{user.username}" if user.username else "بدون یوزرنیم"
-        name = user.full_name or "-"
+        name = user_profile_link(user.telegram_id, user.full_name) or "-"
     else:
         uid = ref.referred_id
         handle = "بدون یوزرنیم"
@@ -58,14 +65,12 @@ async def _show_detail(
     _, total_pages = paginate_meta(total, page, _PAGE_SIZE)
 
     if referrer is not None:
-        ref_id = referrer.telegram_id
-        handle = f"@{referrer.username}" if referrer.username else "بدون یوزرنیم"
+        ref_line = format_user_display(referrer)
     else:
-        ref_id = referrer_id
-        handle = "بدون یوزرنیم"
+        ref_line = f"<code>{referrer_id}</code> | بدون یوزرنیم"
 
     header = (
-        f"👤 <b>دعوت‌کننده:</b>\n<code>{ref_id}</code> | {handle}\n\n"
+        f"👤 <b>دعوت‌کننده:</b>\n{ref_line}\n\n"
         f"👥 <b>تعداد دعوت‌شده‌ها:</b> {total} نفر\n"
         f"💰 <b>مجموع پاداش پرداخت‌شده:</b> {format_toman(rewarded_sum)}"
     )

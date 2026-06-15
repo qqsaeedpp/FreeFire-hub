@@ -1,6 +1,8 @@
 """Common user handlers: /start, main menu, global cancel."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -19,6 +21,7 @@ from app.utils.helpers import (
     answer_managed,
     edit_or_answer,
     format_toman,
+    format_user_display,
     safe_answer,
 )
 
@@ -55,7 +58,17 @@ async def process_pending_referral(services: Services, bot, invitee: User) -> No
         return
     await services.commit()
     notifier = NotificationService(bot)
-    invitee_handle = f"@{invitee.username}" if invitee.username else "بدون یوزرنیم"
+    # One shared formatter for both parties → «id | @username» or, with no
+    # username, «id | <tappable profile name>». The invitee is a full User; the
+    # referrer is rebuilt from the reward result's primitive fields.
+    invitee_handle = format_user_display(invitee)
+    referrer_handle = format_user_display(
+        SimpleNamespace(
+            telegram_id=result.referrer_telegram_id,
+            username=result.referrer_username,
+            full_name=result.referrer_full_name,
+        )
+    )
     if result.referrer_telegram_id:
         await notifier.notify_user(
             result.referrer_telegram_id,
@@ -64,9 +77,6 @@ async def process_pending_referral(services: Services, bot, invitee: User) -> No
             "👤 کاربر:\n"
             f"{invitee_handle}",
         )
-    referrer_handle = (
-        f"@{result.referrer_username}" if result.referrer_username else "بدون یوزرنیم"
-    )
     await notifier.notify_admins(
         await services.admin.all_admin_ids(),
         "👥 زیرمجموعه جدید ثبت شد.\n"

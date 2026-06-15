@@ -22,11 +22,16 @@ class ReferralResult:
         referrer_telegram_id: int | None,
         amount: int,
         referrer_username: str | None = None,
+        referrer_full_name: str | None = None,
     ):
         self.rewarded = rewarded
         self.referrer_telegram_id = referrer_telegram_id
         self.amount = amount
         self.referrer_username = referrer_username
+        # Carried so referral notifications can render a tappable profile link
+        # for a referrer who has no @username. Optional/defaulted → backward
+        # compatible with every existing ``ReferralResult(...)`` construction.
+        self.referrer_full_name = referrer_full_name
 
 
 class ReferralService:
@@ -90,7 +95,9 @@ class ReferralService:
             TransactionType.REFERRAL_REWARD,
             description="پاداش دعوت کاربر جدید",
         )
-        return ReferralResult(True, referrer.telegram_id, amount, referrer.username)
+        return ReferralResult(
+            True, referrer.telegram_id, amount, referrer.username, referrer.full_name
+        )
 
     async def process_pending(self, user: User) -> ReferralResult:
         """Reward a referral that was captured at /start but couldn't be paid yet.

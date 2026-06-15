@@ -115,16 +115,53 @@ def is_admin_user(message: Message, db_user) -> bool:
     return (tg_id in settings.admin_ids) or bool(db_user and db_user.is_admin)
 
 
-def user_ref(user) -> str:
-    """Render a user as ``<code>telegram_id</code> | @username`` for display.
+def user_profile_link(telegram_id, name) -> str:
+    """A tappable Telegram profile mention for *name* (HTML ``tg://user`` link).
 
-    Falls back to «بدون یوزرنیم» when the user has no username and «?» when the
-    user object itself is missing.
+    Uses the official ``tg://user?id=`` deep link so a user *without* a @username
+    is still clickable — tapping the name opens their Telegram profile. Returns an
+    empty string when *name* is blank. The name is HTML-escaped because messages
+    render with HTML parse mode.
+    """
+    from html import escape
+
+    safe = escape(str(name or "").strip())
+    if not safe:
+        return ""
+    return f'<a href="tg://user?id={telegram_id}">{safe}</a>'
+
+
+def format_user_display(user) -> str:
+    """Render a user as ``<code>telegram_id</code> | <handle>`` for display.
+
+    The single shared formatter used everywhere a user is shown (diamond/account
+    orders, sell & requested accounts, wallet, referrals, admin notifications,
+    pending/approved lists, the log channel, …):
+
+    * has a @username        → ``<code>id</code> | @username`` (unchanged)
+    * no username but a name  → ``<code>id</code> | <tappable name>`` — the name
+      links to the user's profile via ``tg://user?id=`` so they're still reachable
+    * neither                → ``<code>id</code> | بدون یوزرنیم``
+    * missing user object     → ``?``
+
+    Accepts any object exposing ``username``/``full_name`` plus either
+    ``telegram_id`` or ``user_id`` (so a ban-entry row formats identically).
     """
     if user is None:
         return "?"
-    handle = f"@{user.username}" if getattr(user, "username", None) else "بدون یوزرنیم"
-    return f"<code>{user.telegram_id}</code> | {handle}"
+    tg_id = getattr(user, "telegram_id", None)
+    if tg_id is None:
+        tg_id = getattr(user, "user_id", None)
+    if getattr(user, "username", None):
+        handle = f"@{user.username}"
+    else:
+        handle = user_profile_link(tg_id, getattr(user, "full_name", None)) or "بدون یوزرنیم"
+    return f"<code>{tg_id}</code> | {handle}"
+
+
+# Backward-compatible alias: existing call sites import ``user_ref`` by name and
+# now transparently get the richer (linked-name) rendering for usernameless users.
+user_ref = format_user_display
 
 
 def parse_images(csv: str | None) -> list[str]:

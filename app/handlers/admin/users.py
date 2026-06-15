@@ -18,7 +18,7 @@ from app.keyboards.inline import cancel_only
 from app.services.ban_service import BanEntry, BanError
 from app.services.notification_service import NotificationService
 from app.states.admin_states import UserBanFlow
-from app.utils.helpers import edit_or_answer, fmt_dt, paginate_meta
+from app.utils.helpers import edit_or_answer, fmt_dt, paginate_meta, user_profile_link
 from app.utils.validators import parse_price
 
 router = Router(name="admin_users")
@@ -28,7 +28,7 @@ _PAGE_SIZE = 10
 
 def _ban_line(entry: BanEntry) -> str:
     handle = f"@{entry.username}" if entry.username else "بدون یوزرنیم"
-    name = entry.full_name or "—"
+    name = user_profile_link(entry.user_id, entry.full_name) or "—"
     reason = entry.reason or "—"
     by = f"<code>{entry.banned_by}</code>" if entry.banned_by else "—"
     return (

@@ -16,7 +16,7 @@ from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import cancel_only
 from app.services.notification_service import NotificationService
 from app.states.admin_states import LotteryFlow
-from app.utils.helpers import edit_or_answer, user_ref
+from app.utils.helpers import edit_or_answer, user_profile_link, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="admin_lottery")
@@ -57,7 +57,7 @@ async def lottery_draw(
     admin_lines = [f"🎉 <b>برندگان قرعه‌کشی</b> ({len(winners)} نفر)\n"]
     for w in winners:
         handle = f"@{w.username}" if w.username else "بدون یوزرنیم"
-        name = f" | {w.full_name}" if w.full_name else ""
+        name = f" | {user_profile_link(w.telegram_id, w.full_name)}" if w.full_name else ""
         admin_lines.append(f"👤 کاربر: <code>{w.telegram_id}</code> | {handle}{name}")
     await message.answer("\n".join(admin_lines))
 
