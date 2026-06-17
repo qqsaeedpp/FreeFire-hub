@@ -122,6 +122,25 @@ class ReferralService:
         earned = await self.referrals.total_rewarded(user.id)
         return {"invited": total, "earned": earned}
 
+    # ---- admin: reset referral statistics (relations preserved) ----
+    async def reset_user_statistics(self, user: User) -> int:
+        """Zero one user's referral counters while keeping every relation row.
+
+        Only the *displayed* stats (invite count / rewarded sum) go to zero; the
+        invite relations and the double-reward guard stay intact, so a re-/start by
+        an already-counted invitee can never trigger a second reward. Returns the
+        number of rows reset.
+        """
+        return await self.referrals.reset_counts_for_referrer(user.id)
+
+    async def reset_all_statistics(self) -> int:
+        """Zero *every* referrer's counters globally — deletes no Referral record.
+
+        Same guarantees as :meth:`reset_user_statistics`, applied to all rows.
+        Returns the number of rows reset.
+        """
+        return await self.referrals.reset_all_counts()
+
     # ---- admin: invite management ----
     async def referrers_overview(self, *, page: int, page_size: int):
         """One page of referrers (busiest first), each resolved to its user object.

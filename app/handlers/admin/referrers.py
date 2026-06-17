@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.container import Services
 from app.filters.admin import IsAdmin
@@ -102,5 +103,37 @@ async def referrer_view(
 ) -> None:
     await _show_detail(
         callback.message, services, callback_data.referrer_id, callback_data.page
+    )
+    await callback.answer()
+
+
+# ---- global referral-stats reset (relations preserved) ----
+@router.callback_query(AdminReferrerCB.filter(F.action == "reset_all"), IsAdmin())
+async def referrers_reset_all_confirm(callback: CallbackQuery) -> None:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ تایید", callback_data=AdminReferrerCB(action="reset_all_ok"))
+    kb.button(text="❌ لغو", callback_data=AdminReferrerCB(action="page", page=1))
+    kb.adjust(2)
+    await edit_or_answer(
+        callback.message,
+        "⚠️ آیا از ریست آمار تمام دعوت‌کننده‌ها مطمئن هستید؟\n\n"
+        "فقط شمارنده‌ها و آمارها صفر می‌شوند؛ هیچ رکوردی از روابط دعوت حذف نمی‌شود "
+        "و پاداش تکراری به کسی داده نخواهد شد.",
+        reply_markup=kb.as_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminReferrerCB.filter(F.action == "reset_all_ok"), IsAdmin())
+async def referrers_reset_all_do(callback: CallbackQuery, services: Services) -> None:
+    affected = await services.referral.reset_all_statistics()
+    await services.commit()
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🔙 بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    await edit_or_answer(
+        callback.message,
+        f"✅ آمار تمام دعوت‌کننده‌ها ریست شد ({affected} مورد).\n"
+        "روابط دعوت حفظ شده‌اند و پاداش تکراری داده نمی‌شود.",
+        reply_markup=kb.as_markup(),
     )
     await callback.answer()

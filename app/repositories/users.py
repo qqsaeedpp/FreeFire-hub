@@ -22,6 +22,16 @@ class UserRepository(BaseRepository[User]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_username(self, username: str) -> User | None:
+        """Resolve an exact @username (case-insensitive; a leading @ is optional)."""
+        uname = username.lstrip("@").strip()
+        if not uname:
+            return None
+        result = await self.session.execute(
+            select(User).where(func.lower(User.username) == uname.lower())
+        )
+        return result.scalars().first()
+
     async def search(self, query: str, *, offset: int = 0, limit: int = 20) -> list[User]:
         like = f"%{query}%"
         result = await self.session.execute(

@@ -120,13 +120,19 @@ class AdminMgmtCB(CallbackData, prefix="admgr"):
 
 
 class AdminReferrerCB(CallbackData, prefix="aref"):
-    action: str  # page (referrers list) | view (one referrer's invitees)
+    # page (referrers list) | view (one referrer's invitees) |
+    # reset_all (confirm global stats reset) | reset_all_ok (perform it)
+    action: str
     referrer_id: int = 0
     page: int = 1
 
 
 class UserAdminCB(CallbackData, prefix="usradm"):
-    action: str  # home | ban | unban | confirm_unban | page
+    # Legacy ban-list actions: home | ban | unban | confirm_unban | page
+    # Search-card actions: banlist | card | bal_add | bal_sub | msg |
+    #   card_ban | card_unban | reset_refs | reset_refs_ok
+    # ``user_id`` carries the target's *telegram* id on card actions.
+    action: str
     user_id: int = 0
     page: int = 1
 

@@ -107,6 +107,20 @@ class UserBanFlow(StatesGroup):
     entering_reason = State()
 
 
+class UserManageFlow(StatesGroup):
+    """Search a user, then act on them from the info card.
+
+    Additive to ``UserBanFlow`` (the banned-list ban flow is untouched): this drives
+    the new search-first user-management screen — find by numeric id / @username,
+    then adjust balance, send a message, or capture a ban reason from the card.
+    """
+
+    searching = State()
+    entering_balance = State()
+    entering_message = State()
+    entering_ban_reason = State()
+
+
 class BackupTargetFlow(StatesGroup):
     """Capture the backup destination id (numeric user id or channel id)."""
 

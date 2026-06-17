@@ -102,3 +102,30 @@ class OrderRepository(BaseRepository[Order]):
             select(func.count()).select_from(Order).where(Order.status == status)
         )
         return int(result.scalar_one())
+
+    # ---- per-user aggregates (for the admin user-info card) ----
+    async def count_placed_by_user(self, user_id: int) -> int:
+        """Orders a user actually submitted — excludes never-paid PENDING drafts."""
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Order)
+            .where(Order.user_id == user_id, Order.status != OrderStatus.PENDING)
+        )
+        return int(result.scalar_one())
+
+    async def count_completed_by_user(self, user_id: int) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Order)
+            .where(Order.user_id == user_id, Order.status == OrderStatus.COMPLETED)
+        )
+        return int(result.scalar_one())
+
+    async def total_paid_by_user(self, user_id: int) -> int:
+        """Sum (Toman) of the user's completed-order amounts."""
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(Order.amount), 0)).where(
+                Order.user_id == user_id, Order.status == OrderStatus.COMPLETED
+            )
+        )
+        return int(result.scalar_one())

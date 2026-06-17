@@ -19,3 +19,8 @@ class Referral(Base):
     )
     rewarded: Mapped[bool] = mapped_column(Boolean, default=False)
     reward_amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    # Whether this relation contributes to its referrer's *displayed* statistics.
+    # A reset (per-user or global) flips this to False to zero the counters WITHOUT
+    # deleting the row, so the invite relation and the double-reward guard
+    # (``get_by_referred``) stay intact. Defaults True → every new referral counts.
+    counted: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -668,7 +668,13 @@ def referrers_menu(rows, page: int, total_pages: int) -> InlineKeyboardMarkup:
     kb.attach(_pagination_row(AdminReferrerCB, "page", page, total_pages))
 
     tail = InlineKeyboardBuilder()
+    tail.button(
+        text="♻️ ریست آمار همه دعوت‌کننده‌ها",
+        callback_data=AdminReferrerCB(action="reset_all", page=page),
+        **style_kwargs(STYLE_DANGER),
+    )
     tail.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
+    tail.adjust(1)
     kb.attach(tail)
     return kb.as_markup()
 
