@@ -22,6 +22,7 @@ from app.handlers.admin import sale_accounts as admin_sale_accounts
 from app.handlers.admin import texts as admin_texts
 from app.handlers.admin import tutorials as admin_tutorials
 from app.handlers.admin import users as admin_users
+from app.handlers.admin import wallet_requests as admin_wallet_requests
 from app.handlers.support import tickets as support_tickets
 from app.handlers.user import account as user_account
 from app.handlers.user import channel_lock as user_channel_lock
@@ -39,6 +40,7 @@ def register_routers(dp: Dispatcher) -> None:
     # Admin first so admin-only filters take precedence.
     dp.include_router(admin_panel.router)
     dp.include_router(admin_orders.router)
+    dp.include_router(admin_wallet_requests.router)
     dp.include_router(admin_accounts.router)
     dp.include_router(admin_sale_accounts.router)
     dp.include_router(admin_requested_accounts.router)

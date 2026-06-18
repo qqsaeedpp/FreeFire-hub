@@ -142,3 +142,13 @@ class BackupCB(CallbackData, prefix="bkp"):
     # set_schedule | toggle | restore | restore_confirm | restore_cancel
     action: str
     value: str | None = None  # schedule type token for set_schedule
+
+
+class WalletTopUpCB(CallbackData, prefix="wtop"):
+    # page (list) | view / details (full detail + receipt) | approve | reject.
+    # ``page`` carries the list page so a decision can refresh the list in place;
+    # ``page == 0`` marks an action taken from the instant-notification card (the
+    # receipt photo) so the handler updates that card instead of a list message.
+    action: str
+    req_id: int = 0
+    page: int = 1

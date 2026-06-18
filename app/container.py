@@ -30,6 +30,7 @@ from app.repositories.tickets import TicketRepository
 from app.repositories.tutorial_media import TutorialMediaRepository
 from app.repositories.users import UserRepository
 from app.repositories.wallets import WalletRepository
+from app.repositories.wallet_topup_requests import WalletTopUpRequestRepository
 from app.services.account_service import AccountService
 from app.services.admin_service import AdminService
 from app.services.backup_service import BackupService
@@ -47,6 +48,7 @@ from app.services.ticket_service import TicketService
 from app.services.tutorial_service import TutorialService
 from app.services.user_service import UserService
 from app.services.wallet_service import WalletService
+from app.services.wallet_topup_service import WalletTopUpService
 
 
 class Services:
@@ -61,6 +63,7 @@ class Services:
         self.requested_repo = RequestedAccountRepository(session)
         self.payments = PaymentRepository(session)
         self.wallets_repo = WalletRepository(session)
+        self.wallet_topup_requests_repo = WalletTopUpRequestRepository(session)
         self.tickets_repo = TicketRepository(session)
         self.referrals_repo = ReferralRepository(session)
         self.cards_repo = PaymentCardRepository(session)
@@ -76,6 +79,9 @@ class Services:
 
         # services
         self.wallet = WalletService(self.wallets_repo)
+        self.wallet_topup = WalletTopUpService(
+            self.wallet_topup_requests_repo, self.wallet
+        )
         self.user = UserService(self.users, self.referrals_repo)
         self.referral = ReferralService(
             self.referrals_repo, self.wallet, self.users, redis_client

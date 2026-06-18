@@ -17,6 +17,7 @@ from app.models.ticket import Ticket, TicketMessage
 from app.models.tutorial_media import TutorialMedia
 from app.models.user import User
 from app.models.wallet import Wallet, WalletTransaction
+from app.models.wallet_topup_request import WalletTopUpRequest
 
 __all__ = [
     "User",
@@ -28,6 +29,7 @@ __all__ = [
     "RequestedAccount",
     "Wallet",
     "WalletTransaction",
+    "WalletTopUpRequest",
     "Referral",
     "Ticket",
     "TicketMessage",

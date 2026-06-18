@@ -8,20 +8,25 @@ from aiogram.types import Message
 from app.container import Services
 from app.core.config import settings
 from app.core.constants import (
-    PAYMENT_METHOD_FA,
     CardPurpose,
     PaymentMethod,
     TransactionType,
 )
 from app.handlers.user.payment import prompt_payment_method
-from app.keyboards.inline import cancel_only
+from app.keyboards.inline import cancel_only, wallet_topup_notify_actions
 from app.keyboards.reply import build_main_menu
 from app.filters.buttons import MainBtn
 from app.services.button_service import BTN_KEY_WALLET
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import WalletFlow
-from app.utils.helpers import format_toman, is_admin_user, safe_answer, user_ref
+from app.utils.helpers import (
+    format_toman,
+    is_admin_user,
+    safe_answer,
+    user_ref,
+    wallet_topup_notify_text,
+)
 from app.utils.validators import parse_price
 
 router = Router(name="user_wallet")
@@ -32,6 +37,7 @@ _TX_FA = {
     TransactionType.PURCHASE: "خرید",
     TransactionType.REFERRAL_REWARD: "پاداش زیرمجموعه",
     TransactionType.REFUND: "بازگشت وجه",
+    TransactionType.WALLET_CHARGE: "شارژ کیف پول",
 }
 
 
@@ -87,47 +93,41 @@ async def topup_receipt(
 ) -> None:
     data = await state.get_data()
     amount = data["amount"]
-    method_fa = PAYMENT_METHOD_FA.get(
-        PaymentMethod(data["pay_method"]) if data.get("pay_method") else None, "-"
-    )
+    method = PaymentMethod(data["pay_method"]) if data.get("pay_method") else None
     file_id = message.photo[-1].file_id
+    # Persist a PENDING request first so it lands in «📋 سفارشات در انتظار → 💰
+    # سفارش‌های کیف پول» and can be approved exactly once. The wallet is NOT
+    # credited here — only when an admin approves (shared WalletTopUpService).
+    req = await services.wallet_topup.create_request(
+        user_id=db_user.id,
+        amount=amount,
+        payment_method=method,
+        receipt_file_id=file_id,
+    )
+    await services.commit()
     await safe_answer(
         message,
         "✅ رسید شارژ کیف پول دریافت شد و پس از تایید پشتیبانی به موجودی شما اضافه می‌شود.",
         reply_markup=await build_main_menu(services, is_admin_user(message, db_user)),
     )
+    # Instant notification (alongside the list — it never replaces it). Same
+    # request id is carried in the buttons, so deciding here goes through the
+    # exact same idempotent service as the list.
     notifier = NotificationService(bot)
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    from app.keyboards.callbacks import AdminCB
-
-    kb = InlineKeyboardBuilder()
-    kb.button(
-        text="✅ تایید شارژ",
-        callback_data=AdminCB(action="approve_topup", value=f"{db_user.id}-{amount}"),
-    )
-    kb.button(
-        text="❌ رد شارژ",
-        callback_data=AdminCB(action="reject_topup", value=f"{db_user.id}-{amount}"),
-    )
-    kb.adjust(2)
-    caption = (
-        f"💳 <b>درخواست شارژ کیف پول</b>\n"
-        f"کاربر: {user_ref(db_user)}\n"
-        f"روش پرداخت: {method_fa}\n"
-        f"مبلغ: {format_toman(amount)}"
-    )
+    caption = wallet_topup_notify_text(req, db_user)
+    actions = wallet_topup_notify_actions(req.id)
     try:
         await bot.send_photo(
-            settings.admin_id, file_id, caption=caption, reply_markup=kb.as_markup()
+            settings.admin_id, file_id, caption=caption, reply_markup=actions
         )
     except Exception:  # noqa: BLE001
-        await notifier.notify_admin(caption, reply_markup=kb.as_markup())
-    # Additive layer: alert every other authorized admin (legacy send above
-    # covered settings.admin_id). Top-up approval flow is unchanged.
+        await notifier.notify_admin(caption, reply_markup=actions)
+    # Additive fan-out to every other authorized admin (legacy send above
+    # covered settings.admin_id).
     await notifier.notify_admins(
         await services.admin.all_admin_ids(),
         caption,
-        reply_markup=kb.as_markup(),
+        reply_markup=actions,
         photo=file_id,
         exclude={settings.admin_id},
     )

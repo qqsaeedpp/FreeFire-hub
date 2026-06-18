@@ -27,6 +27,7 @@ from app.keyboards.callbacks import (
     PayMethodCB,
     TicketCB,
     TutorialCB,
+    WalletTopUpCB,
 )
 from app.keyboards.style import (
     STYLE_DANGER,
@@ -476,6 +477,11 @@ def pending_kind_menu() -> InlineKeyboardMarkup:
         callback_data=AdminCB(action="pending_orders", value="account"),
         **style_kwargs(STYLE_PRIMARY),
     )
+    kb.button(
+        text="💰 سفارش‌های کیف پول",
+        callback_data=AdminCB(action="wallet_requests"),
+        **style_kwargs(STYLE_SUCCESS),
+    )
     kb.button(text="⬅️ بازگشت به پنل", callback_data=AdminCB(action="back_home"))
     kb.adjust(1)
     return kb.as_markup()
@@ -627,6 +633,87 @@ def requested_account_delete_confirm(req_id: int, page: int) -> InlineKeyboardMa
         callback_data=AdminRequestedCB(action="view", req_id=req_id, page=page),
     )
     kb.adjust(2)
+    return kb.as_markup()
+
+
+def wallet_topup_list_menu(rows, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """«💰 سفارش‌های کیف پول» — glass list of PENDING wallet-charge requests.
+
+    ``rows`` are ``(req, user)`` tuples. Button labels are plain text (inline
+    buttons can't carry HTML/links), so a usernameless user falls back to their
+    name and finally their telegram id. Back returns to the pending-orders chooser.
+    """
+    kb = InlineKeyboardBuilder()
+    for req, user in rows:
+        if user is not None and user.username:
+            handle = f"@{user.username}"
+        elif user is not None and user.full_name:
+            handle = user.full_name
+        elif user is not None:
+            handle = str(user.telegram_id)
+        else:
+            handle = "—"
+        kb.button(
+            text=f"💰 #{req.id} | {format_toman(req.amount)} | {handle}",
+            callback_data=WalletTopUpCB(action="view", req_id=req.id, page=page),
+        )
+    kb.adjust(1)
+    kb.attach(_pagination_row(WalletTopUpCB, "page", page, total_pages))
+
+    tail = InlineKeyboardBuilder()
+    tail.button(text="⬅️ بازگشت", callback_data=AdminCB(action="pending_orders"))
+    kb.attach(tail)
+    return kb.as_markup()
+
+
+def wallet_topup_detail_menu(req_id: int, page: int) -> InlineKeyboardMarkup:
+    """Decision buttons under one request opened from the list (page>=1)."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="✅ تایید شارژ کیف پول",
+        callback_data=WalletTopUpCB(action="approve", req_id=req_id, page=page),
+        **style_kwargs(STYLE_SUCCESS),
+    )
+    kb.button(
+        text="❌ رد درخواست",
+        callback_data=WalletTopUpCB(action="reject", req_id=req_id, page=page),
+        **style_kwargs(STYLE_DANGER),
+    )
+    kb.button(
+        text="📄 جزئیات کامل",
+        callback_data=WalletTopUpCB(action="details", req_id=req_id, page=page),
+    )
+    kb.button(
+        text="🔙 بازگشت",
+        callback_data=WalletTopUpCB(action="page", page=page),
+    )
+    kb.adjust(2, 1, 1)
+    return kb.as_markup()
+
+
+def wallet_topup_notify_actions(req_id: int) -> InlineKeyboardMarkup:
+    """Buttons under the instant-notification card (``page=0`` sentinel).
+
+    ``page=0`` tells the handler the action came from the receipt-photo card (so
+    it annotates that card) rather than the in-place list; same convention as the
+    sale-account notification buttons.
+    """
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="✅ تایید شارژ",
+        callback_data=WalletTopUpCB(action="approve", req_id=req_id, page=0),
+        **style_kwargs(STYLE_SUCCESS),
+    )
+    kb.button(
+        text="❌ رد درخواست",
+        callback_data=WalletTopUpCB(action="reject", req_id=req_id, page=0),
+        **style_kwargs(STYLE_DANGER),
+    )
+    kb.button(
+        text="📄 جزئیات",
+        callback_data=WalletTopUpCB(action="details", req_id=req_id, page=0),
+    )
+    kb.adjust(2, 1)
     return kb.as_markup()
 
 

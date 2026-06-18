@@ -102,6 +102,17 @@ class TransactionType(str, enum.Enum):
     PURCHASE = "purchase"
     REFERRAL_REWARD = "referral_reward"
     REFUND = "refund"
+    # Wallet charge approved by an admin from a WalletTopUpRequest (kept distinct
+    # from the generic DEPOSIT so charge history is auditable on its own).
+    WALLET_CHARGE = "wallet_charge"
+
+
+class WalletTopUpStatus(str, enum.Enum):
+    """Lifecycle of a user's wallet-charge request awaiting admin review."""
+
+    PENDING = "pending"     # receipt submitted, not yet acted on (shown in the list)
+    APPROVED = "approved"   # admin confirmed → wallet credited exactly once
+    REJECTED = "rejected"   # admin declined → nothing credited
 
 
 class PaymentStatus(str, enum.Enum):
@@ -134,6 +145,12 @@ ORDER_TYPE_FA: dict[str, str] = {
     OrderType.DIAMOND_UID: "خرید جم با UID",
     OrderType.DIAMOND_ACCOUNT: "خرید جم با اطلاعات اکانت",
     OrderType.ACCOUNT_PURCHASE: "خرید اکانت",
+}
+
+WALLET_TOPUP_STATUS_FA: dict[str, str] = {
+    WalletTopUpStatus.PENDING: "در انتظار بررسی",
+    WalletTopUpStatus.APPROVED: "تایید و شارژ شد",
+    WalletTopUpStatus.REJECTED: "رد شده",
 }
 
 TICKET_STATUS_FA: dict[str, str] = {

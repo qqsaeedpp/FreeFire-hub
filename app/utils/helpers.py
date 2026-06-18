@@ -280,3 +280,40 @@ def sale_request_caption(account, seller) -> str:
     if account.description:
         lines += ["", f"📝 <b>توضیحات:</b> {escape(account.description)}"]
     return "\n".join(lines)
+
+
+def _wallet_topup_core(req, user) -> list[str]:
+    """Shared middle rows for the top-up notification + detail (so they never drift)."""
+    from app.core.constants import PAYMENT_METHOD_FA
+
+    method_fa = PAYMENT_METHOD_FA.get(req.payment_method, "-")
+    return [
+        f"🧾 شماره درخواست: #{req.id}",
+        "👤 کاربر:",
+        user_ref(user),
+        f"💰 مبلغ شارژ: {format_toman(req.amount)}",
+        f"💳 روش پرداخت: {method_fa}",
+    ]
+
+
+def wallet_topup_notify_text(req, user) -> str:
+    """Instant «🔔 درخواست شارژ کیف پول جدید» card sent to admins (caption of the receipt)."""
+    lines = ["🔔 <b>درخواست شارژ کیف پول جدید</b>", ""]
+    lines += _wallet_topup_core(req, user)
+    lines.append(f"📅 زمان ثبت: {fmt_dt(req.created_at)}")
+    return "\n".join(lines)
+
+
+def wallet_topup_detail_text(req, user) -> str:
+    """Full in-panel detail for one top-up request (receipt is sent as a separate photo)."""
+    from app.core.constants import WALLET_TOPUP_STATUS_FA
+
+    lines = ["💰 <b>درخواست شارژ کیف پول</b>", ""]
+    lines += _wallet_topup_core(req, user)
+    receipt = "✅ ضمیمه شده (در پیام جدا)" if req.receipt_file_id else "—"
+    lines += [
+        f"📷 رسید پرداخت: {receipt}",
+        f"📅 زمان ثبت: {fmt_dt(req.created_at)}",
+        f"📊 وضعیت: {WALLET_TOPUP_STATUS_FA.get(req.status, req.status)}",
+    ]
+    return "\n".join(lines)
