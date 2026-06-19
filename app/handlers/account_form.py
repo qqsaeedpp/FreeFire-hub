@@ -10,15 +10,20 @@ Both paths walk the exact same FSM (``AccountFormFlow``) and create the exact sa
 """
 from __future__ import annotations
 
+import asyncio
+from html import escape
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
 from app.core.constants import AccountStatus
+from app.core.database import get_sessionmaker
+from app.core.logger import get_logger
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB
-from app.keyboards.inline import admin_sale_review, cancel_only
+from app.keyboards.inline import admin_sale_review, cancel_only, new_listing_announce_menu
 from app.keyboards.reply import build_main_menu
 from app.filters.buttons import MainBtn
 from app.services.account_service import is_account_visible_for_users
@@ -28,18 +33,43 @@ from app.services.notification_service import NotificationService
 from app.states.user_states import AccountFormFlow
 from app.utils.helpers import (
     edit_or_answer,
+    format_toman,
     is_admin_user,
     parse_images,
     safe_answer,
     sale_request_caption,
+    send_album,
     send_listing_card,
     user_ref,
 )
 from app.utils.validators import parse_price
 
 router = Router(name="account_form")
+log = get_logger("account.broadcast")
 
 _SKIP = {"-", "ندارم", "خالی"}
+
+# ---- Public new-listing broadcast (additive notification layer) ----------
+# Pause between sends to stay within Telegram's flood limits (matches the admin
+# broadcast cadence).
+_SEND_DELAY = 0.05
+# Telegram caption limit for a photo / album's first item. A longer body rides in
+# a separate follow-up text message (which allows up to 4096 characters).
+_CAPTION_LIMIT = 1024
+_TEXT_LIMIT = 4096
+# Prompt that carries the glass CTA when the announcement went out as an album
+# (media groups can't hold an inline keyboard).
+_VIEW_PROMPT = "🛒 برای مشاهده و خرید این اکانت روی دکمه زیر بزنید:"
+
+# Detached broadcast tasks are kept referenced so the event loop can't garbage-
+# collect them mid-send (same pattern as the admin broadcast / backup handlers).
+_BG_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
 
 
 def _opt(text: str) -> str | None:
@@ -190,6 +220,12 @@ async def _finalize_listing(
             await message.answer(
                 f"✅ اکانت #{account.id} با موفقیت ثبت شد و در لیست خرید کاربران قابل مشاهده است."
             )
+            # Additive notification layer: announce the new (buyer-visible) listing
+            # to every active user. Fire-and-forget so the admin's flow returns
+            # instantly; the account row, the shop list and the admin notification
+            # system are untouched. Only buyer-visible accounts are announced — the
+            # CTA opens the shop list, where a price-invalid account wouldn't show.
+            _broadcast_new_listing(bot, account)
         else:
             await message.answer(
                 f"⚠️ اکانت #{account.id} ثبت شد اما به دلیل نداشتن قیمت معتبر "
@@ -230,3 +266,114 @@ async def _notify_admin_new_listing(bot, services: Services, account, seller: Us
         "فروش اکانت",
         {"اکانت": f"#{account.id}", "فروشنده": user_ref(seller)},
     )
+
+
+# ===================== PUBLIC NEW-LISTING BROADCAST =====================
+def _new_listing_caption(account) -> str:
+    """Public «اکانت جدید برای فروش اضافه شد» announcement body (HTML-safe).
+
+    Title and description are user/admin-supplied free text, so they're escaped
+    because messages go out with HTML parse mode. The whole body is capped at the
+    text-message limit so an over-long description can never make the send fail.
+    """
+    title = escape(account.title or "-")
+    description = escape(account.description or "-")
+    caption = (
+        "👤 <b>اکانت جدید برای فروش اضافه شد</b>\n\n"
+        f"🆔 نام اکانت: {title}\n"
+        f"💰 قیمت: {format_toman(account.price)}\n"
+        f"📝 توضیحات: {description}"
+    )
+    return caption[:_TEXT_LIMIT]
+
+
+async def _active_recipient_ids() -> list[int]:
+    """Snapshot every active, non-banned user's telegram id, then release the DB.
+
+    Pulled in a short-lived session so the (possibly long) send loop afterwards
+    never holds a database connection open — it touches Telegram only. Mirrors the
+    audience the lottery already uses (``is_active`` and not banned).
+    """
+    async with get_sessionmaker()() as session:
+        users = await Services(session).users.list_active()
+        return [u.telegram_id for u in users]
+
+
+async def _deliver_announcement(
+    bot, chat_id: int, caption: str, images: list[str], keyboard
+) -> None:
+    """Send one recipient the announcement; raise on Telegram errors so the caller
+    can count the failure.
+
+    Image ``file_id``s are reused verbatim (never re-downloaded) and their order is
+    preserved. One image rides as a captioned photo carrying the CTA; several go as
+    an ordered media group (which can't hold a keyboard) followed by the CTA in its
+    own message. A body longer than a photo caption is sent as text after the
+    gallery, and a missing/stale image falls back to a text-only card — so the
+    button always reaches the user.
+    """
+    if images and len(caption) <= _CAPTION_LIMIT:
+        if len(images) == 1:
+            await bot.send_photo(
+                chat_id, images[0], caption=caption, reply_markup=keyboard
+            )
+            return
+        if await send_album(bot, chat_id, images, caption=caption):
+            await bot.send_message(chat_id, _VIEW_PROMPT, reply_markup=keyboard)
+            return
+        # Album rejected (stale file_id) → fall through to a text-only card.
+    elif images:
+        # Caption too long for a photo caption → gallery alone, full text follows.
+        await send_album(bot, chat_id, images, caption=None)
+    await bot.send_message(chat_id, caption, reply_markup=keyboard)
+
+
+async def _run_new_listing_broadcast(
+    bot, account_id: int, caption: str, images: list[str]
+) -> None:
+    """Deliver the new-listing announcement to every active user.
+
+    Runs detached so the admin's listing flow returns instantly. A per-user failure
+    (blocked bot, deactivated account, stale id) is logged and skipped so one bad
+    recipient never halts the run, and a small pause between sends respects
+    Telegram's flood limits.
+    """
+    try:
+        recipient_ids = await _active_recipient_ids()
+    except Exception as exc:  # noqa: BLE001 - a DB hiccup must not crash the task
+        log.error("new_listing_broadcast_fetch_failed", account=account_id, error=str(exc))
+        return
+
+    keyboard = new_listing_announce_menu()
+    sent = 0
+    failed = 0
+    for tg_id in recipient_ids:
+        try:
+            await _deliver_announcement(bot, tg_id, caption, images, keyboard)
+            sent += 1
+        except Exception as exc:  # noqa: BLE001 - skip & log, keep broadcasting
+            failed += 1
+            log.warning(
+                "new_listing_broadcast_user_failed", user=tg_id, error=str(exc)
+            )
+        await asyncio.sleep(_SEND_DELAY)
+    log.info(
+        "new_listing_broadcast_done",
+        account=account_id,
+        sent=sent,
+        failed=failed,
+        total=sent + failed,
+    )
+
+
+def _broadcast_new_listing(bot, account) -> None:
+    """Fire-and-forget public announcement of a freshly listed account.
+
+    Reads the account's fields synchronously into a plain caption + ``file_id`` list
+    (so the detached task never touches the ORM object or its session), then spawns
+    the send loop. Purely additive: it never mutates the account, the shop list, or
+    the existing admin notification system.
+    """
+    caption = _new_listing_caption(account)
+    images = parse_images(account.images)
+    _spawn(_run_new_listing_broadcast(bot, account.id, caption, images))

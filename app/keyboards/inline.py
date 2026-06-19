@@ -242,6 +242,18 @@ def buy_account_menu() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def new_listing_announce_menu() -> InlineKeyboardMarkup:
+    """Glass CTA under a public «اکانت جدید» broadcast → opens the ready-made shop
+    list (the same ``AccountCB(action="ready")`` the buy-account submenu uses)."""
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="🛒 مشاهده اکانت‌ها",
+        callback_data=AccountCB(action="ready"),
+        **style_kwargs(STYLE_PRIMARY),
+    )
+    return kb.as_markup()
+
+
 def _pagination_row(cb_factory, action: str, page: int, total_pages: int):
     """Build a one-row pagination builder: «قبلی  |  page/total  |  بعدی»."""
     nav = InlineKeyboardBuilder()
