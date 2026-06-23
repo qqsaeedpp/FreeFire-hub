@@ -18,6 +18,12 @@ class Account(Base):
     # Free-text spec written by the seller (level/skins/elite/etc. all go here).
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     images: Mapped[str | None] = mapped_column(Text, nullable=True)  # CSV of file_ids
+    # Premium (custom) emoji typed into the title/description are stored as their
+    # MessageEntity list (JSON) so the exact same emoji can be replayed when the
+    # listing is re-sent. NULL for ordinary listings — they render via HTML as
+    # before. See app.utils.entities.
+    title_entities_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_entities_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[AccountStatus] = mapped_column(
         Enum(AccountStatus), default=AccountStatus.AVAILABLE, index=True

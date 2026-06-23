@@ -24,6 +24,7 @@ from app.models.user import User
 from app.services.account_service import AccountReservationError
 from app.services.notification_service import NotificationService
 from app.states.user_states import AccountPurchaseFlow
+from app.utils.entities import EntityCard, has_custom_emoji, load_entities
 from app.utils.helpers import (
     edit_or_answer,
     format_toman,
@@ -44,6 +45,30 @@ def _detail_text(acc: Account) -> str:
         f"{acc.title}\n\n"
         f"💵 قیمت: <b>{format_toman(acc.price)}</b>\n\n"
         f"📝 توضیحات:\n{acc.description or '-'}"
+    )
+
+
+def _detail_content(acc: Account) -> tuple[str, list | None]:
+    """Buy-account detail as ``(text, entities)``.
+
+    Identical layout to :func:`_detail_text`; when the listing carries premium
+    emoji it's rebuilt as text + entities (sent with ``parse_mode=None``), otherwise
+    the existing HTML string is returned (``entities is None``) unchanged.
+    """
+    title_ents = load_entities(acc.title_entities_json)
+    desc_ents = load_entities(acc.description_entities_json)
+    if not has_custom_emoji(title_ents) and not has_custom_emoji(desc_ents):
+        return _detail_text(acc), None
+    return (
+        EntityCard()
+        .bold(f"🛒 اکانت #{acc.id}")
+        .text("\n")
+        .text(acc.title or "-", title_ents)
+        .text("\n\n💵 قیمت: ")
+        .bold(format_toman(acc.price))
+        .text("\n\n📝 توضیحات:\n")
+        .text(acc.description or "-", desc_ents)
+        .build()
     )
 
 
@@ -103,17 +128,20 @@ async def view_account(
         return
     images = parse_images(acc.images)
     kb = account_detail_menu(acc.id, callback_data.page)
+    # Premium-emoji listings carry caption entities; ordinary ones get entities=None
+    # and render via HTML exactly as before.
+    text, entities = _detail_content(acc)
     # Albums can't carry inline buttons, so the gallery goes out first and the
     # action buttons follow in a separate message. If the images are missing or
     # rejected by Telegram (stale file_id), fall back to a text-only detail so the
     # purchase buttons always appear and the flow never breaks.
     sent_album = await send_album(
-        bot, callback.message.chat.id, images, caption=_detail_text(acc)
+        bot, callback.message.chat.id, images, caption=text, caption_entities=entities
     )
     if sent_album:
         await callback.message.answer("👇 برای خرید این اکانت:", reply_markup=kb)
     else:
-        await edit_or_answer(callback.message, _detail_text(acc), reply_markup=kb)
+        await edit_or_answer(callback.message, text, reply_markup=kb, entities=entities)
     await callback.answer()
 
 

@@ -66,22 +66,34 @@ async def edit_or_answer(
     message: Message,
     text: str,
     reply_markup: InlineKeyboardMarkup | None = None,
+    *,
+    entities: list[MessageEntity] | None = None,
 ) -> None:
     """Edit the message in place (text or caption) instead of sending a new one.
 
     Keeps callback-driven navigation to a single, mutating message. Falls back to
     a fresh message only when the source can't be edited (e.g. media-only message
     or the «message is not modified» no-op).
+
+    When ``entities`` are supplied (premium-emoji text), they're sent verbatim with
+    ``parse_mode=None`` — entities and HTML are mutually exclusive. Omitting them
+    keeps the default HTML parse mode, so every existing caller is unaffected.
     """
+    extra = {"entities": entities, "parse_mode": None} if entities else {}
     try:
         if message.text is not None:
-            await message.edit_text(text, reply_markup=reply_markup)
+            await message.edit_text(text, reply_markup=reply_markup, **extra)
         elif message.caption is not None:
-            await message.edit_caption(caption=text, reply_markup=reply_markup)
+            caption_extra = (
+                {"caption_entities": entities, "parse_mode": None} if entities else {}
+            )
+            await message.edit_caption(
+                caption=text, reply_markup=reply_markup, **caption_extra
+            )
         else:
-            await message.answer(text, reply_markup=reply_markup)
+            await message.answer(text, reply_markup=reply_markup, **extra)
     except TelegramBadRequest:
-        await message.answer(text, reply_markup=reply_markup)
+        await message.answer(text, reply_markup=reply_markup, **extra)
 
 
 async def answer_managed(
@@ -177,12 +189,17 @@ async def send_album(
     file_ids: Sequence[str],
     *,
     caption: str | None = None,
+    caption_entities: list[MessageEntity] | None = None,
 ) -> bool:
     """Send photos as a single ordered media group (album).
 
     One photo → a normal photo with caption. Many → an album whose caption sits
     on the first image. Order is preserved and nothing is dropped. Media groups
     cannot carry inline keyboards, so callers send buttons in a follow-up message.
+
+    When ``caption_entities`` are supplied (premium-emoji caption), they ride along
+    with ``parse_mode=None`` (entities and HTML are mutually exclusive); omitting
+    them keeps the default HTML parse mode, so existing callers are unaffected.
 
     Returns ``True`` if the photos were sent, ``False`` if there were none to send
     or Telegram rejected them (e.g. a stale/invalid ``file_id``). A bad image must
@@ -191,11 +208,12 @@ async def send_album(
     ids = [f for f in file_ids if f]
     if not ids:
         return False
+    extra = {"caption_entities": caption_entities, "parse_mode": None} if caption_entities else {}
     try:
         if len(ids) == 1:
-            await bot.send_photo(chat_id, ids[0], caption=caption)
+            await bot.send_photo(chat_id, ids[0], caption=caption, **extra)
         else:
-            builder = MediaGroupBuilder(caption=caption)
+            builder = MediaGroupBuilder(caption=caption, caption_entities=caption_entities)
             for fid in ids:
                 builder.add_photo(media=fid)
             await bot.send_media_group(chat_id, media=builder.build())

@@ -31,6 +31,16 @@ from app.services.button_service import BTN_KEY_SELL_ACCOUNT
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.states.user_states import AccountFormFlow
+from app.utils.entities import (
+    EntityCard,
+    caption_entity_kwargs,
+    dump_entities,
+    entities_for_storage,
+    entity_kwargs,
+    has_custom_emoji,
+    load_entities,
+    normalize_with_entities,
+)
 from app.utils.helpers import (
     edit_or_answer,
     format_toman,
@@ -103,7 +113,18 @@ async def user_entry(message: Message, state: FSMContext) -> None:
 # ============================ SHARED STEPS ============================
 @router.message(AccountFormFlow.title, F.text)
 async def step_title(message: Message, state: FSMContext) -> None:
-    await state.update_data(title=message.text.strip()[:255])
+    # Capture any premium (custom) emoji the admin typed alongside the title so it
+    # can be replayed everywhere the listing is shown. normalize_with_entities
+    # reproduces the old ``.strip()[:255]`` while keeping the entity offsets aligned;
+    # entities_for_storage keeps them only when a custom_emoji is actually present
+    # (so ordinary titles stay entity-free and render exactly as before).
+    title, entities = normalize_with_entities(
+        message.text, message.entities, max_len=255
+    )
+    await state.update_data(
+        title=title,
+        title_entities_json=dump_entities(entities_for_storage(entities)),
+    )
     await state.set_state(AccountFormFlow.price)
     await message.answer("💵 قیمت (تومان):", reply_markup=cancel_only())
 
@@ -126,7 +147,14 @@ async def step_price(message: Message, state: FSMContext) -> None:
 
 @router.message(AccountFormFlow.description, F.text)
 async def step_description(message: Message, state: FSMContext) -> None:
-    await state.update_data(description=message.text.strip(), images=[])
+    # Same premium-emoji capture as the title (no length cap — descriptions aren't
+    # truncated). Stored only when a custom_emoji is present, else NULL/unchanged.
+    description, entities = normalize_with_entities(message.text, message.entities)
+    await state.update_data(
+        description=description,
+        description_entities_json=dump_entities(entities_for_storage(entities)),
+        images=[],
+    )
     await state.set_state(AccountFormFlow.images)
     await message.answer(
         "📸 تصاویر اکانت را ارسال کنید (هر تعداد، حتی به‌صورت آلبوم).\n"
@@ -206,6 +234,8 @@ async def _finalize_listing(
         images=",".join(data.get("images", [])),
         credentials=data.get("login_info"),
         save_info=data.get("save_info"),
+        title_entities_json=data.get("title_entities_json"),
+        description_entities_json=data.get("description_entities_json"),
         status=AccountStatus.AVAILABLE if is_admin else AccountStatus.PENDING_REVIEW,
         seller_user_id=None if is_admin else db_user.id,
     )
@@ -287,6 +317,31 @@ def _new_listing_caption(account) -> str:
     return caption[:_TEXT_LIMIT]
 
 
+def _new_listing_content(account) -> tuple[str, list | None]:
+    """Announcement body as ``(text, entities)``.
+
+    With no premium emoji the listing renders through the existing HTML caption
+    (``entities is None`` → default HTML parse mode). When the title/description
+    carry custom emoji, the same layout is rebuilt as plain text + entities (bold
+    header included) so the premium emoji round-trip — sent with ``parse_mode=None``.
+    """
+    title_ents = load_entities(account.title_entities_json)
+    desc_ents = load_entities(account.description_entities_json)
+    if not has_custom_emoji(title_ents) and not has_custom_emoji(desc_ents):
+        return _new_listing_caption(account), None
+    return (
+        EntityCard()
+        .bold("👤 اکانت جدید برای فروش اضافه شد")
+        .text("\n\n🆔 نام اکانت: ")
+        .text(account.title or "-", title_ents)
+        .text("\n💰 قیمت: ")
+        .text(format_toman(account.price))
+        .text("\n📝 توضیحات: ")
+        .text(account.description or "-", desc_ents)
+        .build()
+    )
+
+
 async def _active_recipient_ids() -> list[int]:
     """Snapshot every active, non-banned user's telegram id, then release the DB.
 
@@ -300,7 +355,7 @@ async def _active_recipient_ids() -> list[int]:
 
 
 async def _deliver_announcement(
-    bot, chat_id: int, caption: str, images: list[str], keyboard
+    bot, chat_id: int, caption: str, caption_entities, images: list[str], keyboard
 ) -> None:
     """Send one recipient the announcement; raise on Telegram errors so the caller
     can count the failure.
@@ -311,25 +366,34 @@ async def _deliver_announcement(
     own message. A body longer than a photo caption is sent as text after the
     gallery, and a missing/stale image falls back to a text-only card — so the
     button always reaches the user.
+
+    ``caption_entities`` (premium emoji) ride with the caption/text wherever it
+    goes; the static CTA follow-up never needs them. They're ``None`` for ordinary
+    listings, which then keep the default HTML parse mode.
     """
     if images and len(caption) <= _CAPTION_LIMIT:
         if len(images) == 1:
             await bot.send_photo(
-                chat_id, images[0], caption=caption, reply_markup=keyboard
+                chat_id, images[0], caption=caption, reply_markup=keyboard,
+                **caption_entity_kwargs(caption_entities),
             )
             return
-        if await send_album(bot, chat_id, images, caption=caption):
+        if await send_album(
+            bot, chat_id, images, caption=caption, caption_entities=caption_entities
+        ):
             await bot.send_message(chat_id, _VIEW_PROMPT, reply_markup=keyboard)
             return
         # Album rejected (stale file_id) → fall through to a text-only card.
     elif images:
         # Caption too long for a photo caption → gallery alone, full text follows.
         await send_album(bot, chat_id, images, caption=None)
-    await bot.send_message(chat_id, caption, reply_markup=keyboard)
+    await bot.send_message(
+        chat_id, caption, reply_markup=keyboard, **entity_kwargs(caption_entities)
+    )
 
 
 async def _run_new_listing_broadcast(
-    bot, account_id: int, caption: str, images: list[str]
+    bot, account_id: int, caption: str, caption_entities, images: list[str]
 ) -> None:
     """Deliver the new-listing announcement to every active user.
 
@@ -349,7 +413,9 @@ async def _run_new_listing_broadcast(
     failed = 0
     for tg_id in recipient_ids:
         try:
-            await _deliver_announcement(bot, tg_id, caption, images, keyboard)
+            await _deliver_announcement(
+                bot, tg_id, caption, caption_entities, images, keyboard
+            )
             sent += 1
         except Exception as exc:  # noqa: BLE001 - skip & log, keep broadcasting
             failed += 1
@@ -369,11 +435,15 @@ async def _run_new_listing_broadcast(
 def _broadcast_new_listing(bot, account) -> None:
     """Fire-and-forget public announcement of a freshly listed account.
 
-    Reads the account's fields synchronously into a plain caption + ``file_id`` list
-    (so the detached task never touches the ORM object or its session), then spawns
-    the send loop. Purely additive: it never mutates the account, the shop list, or
-    the existing admin notification system.
+    Reads the account's fields synchronously into a plain caption (+ its premium-
+    emoji entities) and ``file_id`` list (so the detached task never touches the ORM
+    object or its session), then spawns the send loop. Purely additive: it never
+    mutates the account, the shop list, or the existing admin notification system.
     """
-    caption = _new_listing_caption(account)
+    caption, caption_entities = _new_listing_content(account)
     images = parse_images(account.images)
-    _spawn(_run_new_listing_broadcast(bot, account.id, caption, images))
+    _spawn(
+        _run_new_listing_broadcast(
+            bot, account.id, caption, caption_entities, images
+        )
+    )
