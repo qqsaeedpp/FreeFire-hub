@@ -364,7 +364,7 @@ async def edit_levelup_all(
 
 @router.message(EditDiamondPrice.entering_price, F.text, IsAdmin())
 async def save_plan_price(
-    message: Message, services: Services, state: FSMContext
+    message: Message, services: Services, state: FSMContext, bot
 ) -> None:
     price = parse_price(message.text)
     if price is None or price <= 0:
@@ -373,14 +373,29 @@ async def save_plan_price(
     data = await state.get_data()
     cat_key = data.get("cat_key", "uid")
     code = data.get("plan_code")
+    admin_id = message.from_user.id
+    # Capture the old value for the change-log, then persist (durable in MySQL).
     if code == _LVLALL_CODE:
-        await services.diamond.set_levelup_all_price(price)
-        ok = True
+        old = await services.diamond.get_levelup_all_price()
+        await services.diamond.set_levelup_all_price(price, changed_by=admin_id)
+        ok, field = True, "قیمت خرید همه لول‌اپ‌ها"
     else:
-        ok = await services.diamond.set_plan_price(code, price)
+        plan = await services.diamond.get_plan(code)
+        old = plan.price if plan else None
+        ok = await services.diamond.set_plan_price(code, price, changed_by=admin_id)
+        field = f"قیمت پلن «{plan.name}»" if plan else f"قیمت پلن {code}"
     await services.commit()
     await state.clear()
     if ok:
+        await NotificationService(bot).log_event(
+            "تغییر تنظیمات",
+            {
+                "فیلد": field,
+                "مقدار قبلی": format_toman(int(old)) if old is not None else "—",
+                "مقدار جدید": format_toman(price),
+                "توسط": str(admin_id),
+            },
+        )
         category, label = _PRICE_CATS[cat_key]
         plans = await services.diamond.list_plans_by_category(category)
         all_price = (

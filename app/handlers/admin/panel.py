@@ -198,17 +198,29 @@ async def referral_reward_start(
 
 @router.message(EditReferralReward.entering_amount, F.text, IsAdmin())
 async def referral_reward_save(
-    message: Message, services: Services, state: FSMContext
+    message: Message, services: Services, state: FSMContext, bot
 ) -> None:
     amount = parse_price(message.text)
     if amount is None or amount < 0:
         await message.answer("مبلغ نامعتبر است. یک عدد معتبر وارد کنید.")
         return
-    await services.referral.set_reward(amount)
+    # Persist durably in MySQL (was Redis-only → reverted to the env default on
+    # any Redis loss). The commit makes the value and its audit row stick.
+    old = await services.referral.set_reward(amount, changed_by=message.from_user.id)
+    await services.commit()
     await state.clear()
     await message.answer(
         f"✅ پاداش زیرمجموعه‌گیری به {format_toman(amount)} تغییر یافت.",
         reply_markup=admin_menu(_is_owner(message.from_user.id)),
+    )
+    await NotificationService(bot).log_event(
+        "تغییر تنظیمات",
+        {
+            "فیلد": "پاداش زیرمجموعه‌گیری",
+            "مقدار قبلی": format_toman(int(old)) if old is not None else "—",
+            "مقدار جدید": format_toman(amount),
+            "توسط": str(message.from_user.id),
+        },
     )
 
 

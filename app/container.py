@@ -15,6 +15,7 @@ from app.repositories.accounts import (
     RequestedAccountRepository,
 )
 from app.repositories.admins import AdminRepository
+from app.repositories.app_settings import AppSettingRepository
 from app.repositories.backup_settings import BackupSettingRepository
 from app.repositories.banned_users import BannedUserRepository
 from app.repositories.bot_texts import BotTextRepository
@@ -43,6 +44,7 @@ from app.services.diamond_service import DiamondService
 from app.services.discount_service import DiscountService
 from app.services.order_service import OrderService
 from app.services.referral_service import ReferralService
+from app.services.settings_service import SettingsService
 from app.services.text_service import TextService
 from app.services.ticket_service import TicketService
 from app.services.tutorial_service import TutorialService
@@ -76,17 +78,21 @@ class Services:
         self.admins_repo = AdminRepository(session)
         self.banned_repo = BannedUserRepository(session)
         self.backup_repo = BackupSettingRepository(session)
+        self.app_settings_repo = AppSettingRepository(session)
 
         # services
+        # Durable settings store (MySQL source of truth) — must be built before the
+        # services that read/write settings through it (referral, diamond).
+        self.settings = SettingsService(self.app_settings_repo)
         self.wallet = WalletService(self.wallets_repo)
         self.wallet_topup = WalletTopUpService(
             self.wallet_topup_requests_repo, self.wallet
         )
         self.user = UserService(self.users, self.referrals_repo)
         self.referral = ReferralService(
-            self.referrals_repo, self.wallet, self.users, redis_client
+            self.referrals_repo, self.wallet, self.users, self.settings
         )
-        self.diamond = DiamondService(redis_client, self.orders)
+        self.diamond = DiamondService(self.settings, self.orders)
         self.account = AccountService(
             self.accounts_repo,
             self.sale_requests_repo,

@@ -66,6 +66,48 @@ async def _load_backup_schedule(bot: Bot) -> None:
         log.warning("backup_schedule_load_failed", error=str(exc))
 
 
+async def _import_legacy_settings() -> None:
+    """One-time migration of admin-set values that still live only in Redis into
+    the durable ``app_settings`` table — create-if-absent, never overwriting.
+
+    These settings (referral reward, diamond plan prices, level-up bundle price)
+    used to be Redis-only and reverted to hardcoded/env defaults on any Redis loss;
+    this preserves the *current* admin values across the upgrade. Idempotent: a key
+    already present in MySQL is skipped, so it's safe to run on every startup and it
+    can never overwrite a value an admin set.
+    """
+    from app.container import Services
+    from app.core.database import get_sessionmaker
+    from app.services.settings_service import (
+        KEY_DIAMOND_PLANS,
+        KEY_LEVELUP_ALL_PRICE,
+        KEY_REFERRAL_REWARD,
+    )
+
+    legacy_keys = {
+        KEY_REFERRAL_REWARD: "referral:reward",
+        KEY_DIAMOND_PLANS: "diamond:plans:v4",
+        KEY_LEVELUP_ALL_PRICE: "diamond:levelup_all_price",
+    }
+    try:
+        async with get_sessionmaker()() as session:
+            store = Services(session).settings
+            imported = []
+            for new_key, old_key in legacy_keys.items():
+                if await store.repo.get_by_key(new_key) is not None:
+                    continue  # already durable — never touch it
+                raw = await redis_client.get(old_key)
+                if raw is None:
+                    continue  # nothing set in Redis → keep default-until-set behavior
+                if await store.init_if_absent(new_key, raw):
+                    imported.append(new_key)
+            if imported:
+                await session.commit()
+        log.info("legacy_settings_import", imported=imported)
+    except Exception as exc:  # noqa: BLE001 - startup must never fail on this
+        log.warning("legacy_settings_import_failed", error=str(exc))
+
+
 async def main() -> None:
     configure_logging()
     bot = Bot(
@@ -76,6 +118,7 @@ async def main() -> None:
 
     scheduler = setup_scheduler(bot)
     scheduler.start()
+    await _import_legacy_settings()
     await _load_backup_schedule(bot)
 
     # Bot command menu — only «/start».

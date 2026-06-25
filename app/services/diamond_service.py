@@ -1,25 +1,26 @@
 """Diamond service — manages purchasable diamond plans and creates diamond orders.
 
-Plans are stored in Redis so the admin can edit prices live, falling back to a
-sensible default catalog on first run.
+Plan prices and the level-up bundle price are stored durably in MySQL via
+:class:`~app.services.settings_service.SettingsService`, so an admin can edit them
+live and the values survive restarts/deploys (they used to live only in Redis and
+reverted to the defaults below on any Redis loss or key bump). The default catalog
+here is used only until the first edit — nothing ever overwrites a stored value.
 """
 from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
 
-from redis.asyncio import Redis
-
 from app.core.constants import LoginMethod, OrderType
 from app.models.order import DiamondOrder
 from app.repositories.orders import OrderRepository
+from app.services.settings_service import (
+    KEY_DIAMOND_PLANS,
+    KEY_LEVELUP_ALL_PRICE,
+    SettingsService,
+)
 
-# Bumped to v4 to force a one-time reseed: account-plan display names were
-# cleaned up (English labels dropped, "2180 جم" → "2k جم"). Older cached
-# payloads are obsolete.
-_PLANS_KEY = "diamond:plans:v4"
-# Configurable "buy all Level-Up offers at once" price (Toman).
-_LEVELUP_ALL_KEY = "diamond:levelup_all_price"
+# Default "buy all Level-Up offers at once" price (Toman) — used only until set.
 DEFAULT_LEVELUP_ALL_PRICE = 750_000
 
 # Plan categories.
@@ -77,18 +78,18 @@ def _default_plans() -> list[DiamondPlan]:
 
 
 class DiamondService:
-    def __init__(self, redis: Redis, orders: OrderRepository) -> None:
-        self.redis = redis
+    def __init__(self, app_settings: SettingsService, orders: OrderRepository) -> None:
+        self.app_settings = app_settings
         self.orders = orders
 
     async def list_plans(self) -> list[DiamondPlan]:
-        raw = await self.redis.get(_PLANS_KEY)
-        if not raw:
-            plans = _default_plans()
-            await self._save(plans)
-            return plans
-        data = json.loads(raw)
-        return [DiamondPlan(**p) for p in data]
+        raw = await self.app_settings.get(KEY_DIAMOND_PLANS)
+        if raw is None:
+            # Not seeded yet (fresh install) → the default catalog. It is persisted
+            # the first time an admin edits a price; this never overwrites a stored
+            # value, so admin-edited prices are kept.
+            return _default_plans()
+        return [DiamondPlan(**p) for p in json.loads(raw)]
 
     async def list_plans_by_category(self, category: str) -> list[DiamondPlan]:
         return [p for p in await self.list_plans() if p.category == category]
@@ -99,7 +100,10 @@ class DiamondService:
                 return plan
         return None
 
-    async def set_plan_price(self, code: str, price: int) -> bool:
+    async def set_plan_price(
+        self, code: str, price: int, *, changed_by: int | None = None
+    ) -> bool:
+        """Persist a new price for one plan (admin action). Caller must commit."""
         plans = await self.list_plans()
         found = False
         for plan in plans:
@@ -107,24 +111,26 @@ class DiamondService:
                 plan.price = price
                 found = True
         if found:
-            await self._save(plans)
+            await self.app_settings.set(
+                KEY_DIAMOND_PLANS,
+                json.dumps([asdict(p) for p in plans]),
+                changed_by=changed_by,
+            )
         return found
-
-    async def _save(self, plans: list[DiamondPlan]) -> None:
-        await self.redis.set(_PLANS_KEY, json.dumps([asdict(p) for p in plans]))
 
     async def get_levelup_all_price(self) -> int:
         """Price for the "buy all Level-Up offers at once" bundle (admin-editable)."""
-        raw = await self.redis.get(_LEVELUP_ALL_KEY)
-        if raw is None:
-            return DEFAULT_LEVELUP_ALL_PRICE
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            return DEFAULT_LEVELUP_ALL_PRICE
+        return await self.app_settings.get_int(
+            KEY_LEVELUP_ALL_PRICE, DEFAULT_LEVELUP_ALL_PRICE
+        )
 
-    async def set_levelup_all_price(self, price: int) -> None:
-        await self.redis.set(_LEVELUP_ALL_KEY, int(price))
+    async def set_levelup_all_price(
+        self, price: int, *, changed_by: int | None = None
+    ) -> str | None:
+        """Persist the level-up bundle price (admin action). Caller must commit."""
+        return await self.app_settings.set_int(
+            KEY_LEVELUP_ALL_PRICE, price, changed_by=changed_by
+        )
 
     async def create_uid_order(
         self, user_id: int, plan: DiamondPlan, uid: str
