@@ -34,7 +34,7 @@ from app.handlers.user.discount import prompt_discount
 from app.services.notification_service import NotificationService
 from app.states.user_states import DiamondAccountFlow, DiamondFlow, DiamondUIDFlow
 from app.utils.helpers import format_toman, is_admin_user, safe_answer, user_ref
-from app.utils.validators import is_valid_email, is_valid_uid
+from app.utils.validators import is_valid_uid
 
 router = Router(name="user_diamond")
 
@@ -324,11 +324,8 @@ async def uid_receipt(
 # ----------------------- Account-credentials flow -----------------------
 @router.message(DiamondAccountFlow.entering_email, F.text)
 async def acc_email(message: Message, state: FSMContext) -> None:
-    email = message.text.strip()
-    if not is_valid_email(email):
-        await message.answer("❌ ایمیل نامعتبر است. دوباره ارسال کنید.")
-        return
-    await state.update_data(email=email)
+    # هر چیزی که کاربر وارد کند پذیرفته و ذخیره می‌شود — بدون صحت‌سنجی ایمیل.
+    await state.update_data(email=message.text.strip())
     await state.set_state(DiamondAccountFlow.entering_gmail_password)
     await message.answer("🔑 رمز عبور جیمیل را ارسال کنید:", reply_markup=cancel_only())
 
