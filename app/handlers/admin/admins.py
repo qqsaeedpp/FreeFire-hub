@@ -19,7 +19,7 @@ from app.keyboards.callbacks import AdminCB, AdminMgmtCB
 from app.keyboards.inline import cancel_only
 from app.services.admin_service import AdminEntry, AdminError
 from app.states.admin_states import AdminManageFlow
-from app.utils.helpers import edit_or_answer
+from app.utils.helpers import edit_or_answer, user_profile_link
 from app.utils.validators import parse_price
 
 router = Router(name="admin_admins")
@@ -27,7 +27,9 @@ router = Router(name="admin_admins")
 
 def _entry_line(entry: AdminEntry) -> str:
     handle = f"@{entry.username}" if entry.username else "بدون یوزرنیم"
-    name = entry.first_name or "—"
+    # Tappable profile link for the name, so an admin without a @username is still
+    # reachable in one tap (tg://user?id=). Falls back to «—» when no name.
+    name = user_profile_link(entry.user_id, entry.first_name) or "—"
     return (
         f"{ADMIN_ROLE_FA[entry.role]} | {name}\n"
         f"<code>{entry.user_id}</code> | {handle}"

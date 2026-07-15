@@ -496,7 +496,11 @@ async def reject_finish(
 async def _refresh(callback: CallbackQuery, order_id: int, completed: bool = False) -> None:
     status = "🏁 تکمیل‌شده" if completed else "✅ تاییدشده"
     msg = callback.message
-    body = msg.text if msg.text is not None else (msg.caption or f"سفارش #{order_id}")
+    # Rebuild from the HTML representation, not the plain .text/.caption: html_text
+    # reconstructs the entities back into HTML, so re-sending keeps the <code> id,
+    # bold header and — crucially — the user's tg://user profile link. Reading the
+    # raw .caption would drop every entity and render the name as plain text.
+    body = msg.html_text or f"سفارش #{order_id}"
     new_text = f"{body}\n\n— وضعیت: {status}"
     try:
         if msg.text is not None:

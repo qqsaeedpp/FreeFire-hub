@@ -16,7 +16,7 @@ from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import cancel_only
 from app.services.notification_service import NotificationService
 from app.states.admin_states import LotteryFlow
-from app.utils.helpers import edit_or_answer, user_profile_link, user_ref
+from app.utils.helpers import edit_or_answer, user_ref
 from app.utils.validators import parse_price
 
 router = Router(name="admin_lottery")
@@ -53,12 +53,11 @@ async def lottery_draw(
 
     winners = random.sample(users, k=min(count, len(users)))
 
-    # Admin-facing result: numeric id + username + name (when present) per winner.
+    # Admin-facing result: numeric id + username, or a tappable profile link for a
+    # winner without a @username (shared user_ref → one consistent, linked format).
     admin_lines = [f"🎉 <b>برندگان قرعه‌کشی</b> ({len(winners)} نفر)\n"]
     for w in winners:
-        handle = f"@{w.username}" if w.username else "بدون یوزرنیم"
-        name = f" | {user_profile_link(w.telegram_id, w.full_name)}" if w.full_name else ""
-        admin_lines.append(f"👤 کاربر: <code>{w.telegram_id}</code> | {handle}{name}")
+        admin_lines.append(f"👤 کاربر: {user_ref(w)}")
     await message.answer("\n".join(admin_lines))
 
     # Announce in the channel.

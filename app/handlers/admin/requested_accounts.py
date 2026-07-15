@@ -50,8 +50,10 @@ async def approve_deposit(
             f"✅ بیعانه درخواست اکانت #{req.id} شما تایید شد و در حال پیگیری است.",
         )
     try:
+        # html_text (not the raw .caption) preserves the card's entities — the
+        # <code> id and the user's tg://user profile link — when appending status.
         await callback.message.edit_caption(
-            caption=(callback.message.caption or "") + "\n\n✅ بیعانه تایید شد.",
+            caption=(callback.message.html_text or "") + "\n\n✅ بیعانه تایید شد.",
             reply_markup=None,
         )
     except Exception:  # noqa: BLE001
@@ -77,7 +79,7 @@ async def reject_deposit(
         )
     try:
         await callback.message.edit_caption(
-            caption=(callback.message.caption or "") + "\n\n❌ بیعانه رد شد.",
+            caption=(callback.message.html_text or "") + "\n\n❌ بیعانه رد شد.",
             reply_markup=None,
         )
     except Exception:  # noqa: BLE001
