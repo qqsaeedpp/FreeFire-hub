@@ -16,6 +16,31 @@ class UserRepository(BaseRepository[User]):
         )
         return result.scalar_one_or_none()
 
+    async def get_for_update(self, user_id: int) -> User | None:
+        """Read one user row under ``SELECT … FOR UPDATE``.
+
+        Used to serialize verification finalization: two concurrent captcha
+        callbacks for the same invitee both take this lock, so the loser only
+        proceeds after the winner committed and then sees
+        ``verification_completed_at`` already set. ``populate_existing`` forces
+        the post-lock values onto any copy already in the session's identity map.
+        On SQLite the locking clause is a no-op (serial test sessions).
+        """
+        result = await self.session.execute(
+            select(User)
+            .where(User.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_phone(self, phone: str) -> User | None:
+        """Find the owner of a verified E.164 number (uniqueness pre-check)."""
+        result = await self.session.execute(
+            select(User).where(User.phone == phone)
+        )
+        return result.scalar_one_or_none()
+
     async def get_by_referral_code(self, code: str) -> User | None:
         result = await self.session.execute(
             select(User).where(User.referral_code == code)

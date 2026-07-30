@@ -102,6 +102,18 @@ class AdminRequestedCB(CallbackData, prefix="areq"):
     page: int = 1
 
 
+class VerificationCB(CallbackData, prefix="vrf"):
+    """Onboarding captcha. Carries an opaque, server-bound challenge nonce and the
+    tapped number — never the correct answer, which stays in Redis. The short
+    prefix plus an 11-char nonce keeps the packed payload well inside Telegram's
+    64-byte callback_data limit.
+    """
+
+    action: str  # answer | refresh
+    nonce: str = ""
+    choice: int = 0
+
+
 class ChannelCB(CallbackData, prefix="chlock"):
     action: str  # check (user) | view | toggle | delete | confirm_delete | test (admin)
     channel_id: int = 0

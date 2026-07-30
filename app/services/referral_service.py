@@ -107,7 +107,15 @@ class ReferralService:
         referrer via :meth:`link_and_reward`, whose own anti-abuse guards (referrer
         exists, no self-invite, invitee referred at most once) still apply. If the
         user already has a referrer, nothing happens.
+
+        A referral may only be created for a **fully verified** invitee. That rule
+        is enforced here, not just at the call sites, so no present or future
+        handler can pay out a referral for an unverified account. The check runs
+        *before* the pending code is read or cleared, so an unverified user keeps
+        their code for the retry that follows verification.
         """
+        if user.verification_completed_at is None:
+            return ReferralResult(False, None, 0)
         code = user.pending_referral_code
         if not code:
             return ReferralResult(False, None, 0)

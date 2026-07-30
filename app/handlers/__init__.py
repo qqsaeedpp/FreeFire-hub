@@ -33,6 +33,7 @@ from app.handlers.user import orders as user_orders
 from app.handlers.user import payment as user_payment
 from app.handlers.user import referral as user_referral
 from app.handlers.user import sell as user_sell
+from app.handlers.user import verification as user_verification
 from app.handlers.user import wallet as user_wallet
 
 
@@ -64,6 +65,9 @@ def register_routers(dp: Dispatcher) -> None:
     dp.include_router(account_form.router)
 
     dp.include_router(user_common.router)
+    # Onboarding (contact + captcha) — before the feature routers so a shared
+    # contact is never swallowed by an unrelated flow's broad message handler.
+    dp.include_router(user_verification.router)
     dp.include_router(user_channel_lock.router)
     dp.include_router(user_payment.router)
     dp.include_router(user_discount.router)

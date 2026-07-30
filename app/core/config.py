@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     card_number: str = Field("0000-0000-0000-0000", alias="CARD_NUMBER")
     card_holder: str = Field("Store Owner", alias="CARD_HOLDER")
 
+    # --- Onboarding verification ---
+    # Lifetime of one math-captcha challenge, and how many wrong answers a user
+    # may give before a short cooldown. Both are tunable without a code change.
+    captcha_ttl_seconds: int = Field(300, alias="CAPTCHA_TTL_SECONDS")
+    captcha_max_attempts: int = Field(3, alias="CAPTCHA_MAX_ATTEMPTS")
+    captcha_cooldown_seconds: int = Field(60, alias="CAPTCHA_COOLDOWN_SECONDS")
+
     # --- Runtime ---
     debug: bool = Field(False, alias="DEBUG")
     timezone: str = Field("Asia/Tehran", alias="TIMEZONE")

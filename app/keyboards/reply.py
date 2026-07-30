@@ -150,3 +150,19 @@ def cancel_menu() -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardBuilder()
     kb.button(text="❌ لغو")
     return kb.as_markup(resize_keyboard=True)
+
+
+BTN_SEND_CONTACT = "📱 ارسال شماره تلفن من"
+
+
+def request_contact_menu() -> ReplyKeyboardMarkup:
+    """Keyboard whose single button shares the sender's own phone number.
+
+    ``request_contact`` is the only way to obtain a number Telegram itself
+    vouches for (the resulting contact carries a ``user_id`` equal to the
+    sender's). It is valid in private chats only, so callers must not offer it
+    in groups.
+    """
+    kb = ReplyKeyboardBuilder()
+    kb.button(text=BTN_SEND_CONTACT, request_contact=True)
+    return kb.as_markup(resize_keyboard=True, one_time_keyboard=True)

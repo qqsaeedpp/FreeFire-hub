@@ -18,6 +18,7 @@ from app.middlewares.channel_lock import ChannelLockMiddleware
 from app.middlewares.database import DatabaseMiddleware
 from app.middlewares.menu_reset import MenuResetMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
+from app.middlewares.verification import VerificationMiddleware
 from app.scheduler.tasks import setup_scheduler
 from app.services.notification_service import NotificationService
 from app.utils.notifications import router as errors_router
@@ -35,6 +36,9 @@ def build_dispatcher() -> Dispatcher:
     dp.update.outer_middleware(BanMiddleware())
     # Forced-channel-membership gate (after ban so db_user/services are loaded).
     dp.update.outer_middleware(ChannelLockMiddleware())
+    # Phone + captcha onboarding gate — strictly after the channel lock, so a
+    # user joins the required channels before being asked to verify.
+    dp.update.outer_middleware(VerificationMiddleware())
 
     # Drop a stale FSM state when a main-menu button is tapped, before the
     # message is routed (otherwise a flow's state handler swallows the press).

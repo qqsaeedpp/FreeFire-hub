@@ -49,6 +49,7 @@ from app.services.text_service import TextService
 from app.services.ticket_service import TicketService
 from app.services.tutorial_service import TutorialService
 from app.services.user_service import UserService
+from app.services.verification_service import VerificationService
 from app.services.wallet_service import WalletService
 from app.services.wallet_topup_service import WalletTopUpService
 
@@ -91,6 +92,11 @@ class Services:
         self.user = UserService(self.users, self.referrals_repo)
         self.referral = ReferralService(
             self.referrals_repo, self.wallet, self.users, self.settings
+        )
+        # Onboarding gate — owns the referral payout hand-off, so it must be
+        # built after the referral service it delegates to.
+        self.verification = VerificationService(
+            self.users, self.referral, redis_client
         )
         self.diamond = DiamondService(self.settings, self.orders)
         self.account = AccountService(

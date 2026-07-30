@@ -4,6 +4,18 @@ from __future__ import annotations
 from aiogram.fsm.state import State, StatesGroup
 
 
+class VerificationFlow(StatesGroup):
+    """Onboarding UX only — never a source of truth.
+
+    The authoritative step always comes from the ``users`` verification columns
+    (see :meth:`VerificationService.next_step`), so clearing this state, losing
+    Redis or restarting the bot cannot skip or repeat a step.
+    """
+
+    waiting_phone = State()
+    waiting_captcha = State()
+
+
 class DiamondFlow(StatesGroup):
     """Shared first steps of the diamond purchase.
 

@@ -13,10 +13,14 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.filters.buttons import MainBtn
 from app.keyboards.callbacks import NavCB
-from app.keyboards.reply import build_main_menu
+from app.keyboards.inline import captcha_menu
+from app.keyboards.reply import build_main_menu, request_contact_menu
 from app.models.user import User
 from app.services.button_service import BTN_KEY_CONTACT
 from app.services.notification_service import NotificationService
+from app.services.referral_service import ReferralResult
+from app.services.verification_service import OnboardingStep
+from app.states.user_states import VerificationFlow
 from app.utils.helpers import (
     answer_managed,
     edit_or_answer,
@@ -27,6 +31,24 @@ from app.utils.helpers import (
 
 router = Router(name="user_common")
 log = get_logger("user.common")
+
+ASK_PHONE_TEXT = (
+    "📱 برای ادامه، لطفاً شماره تلفن متعلق به همین حساب تلگرام را با دکمه زیر ارسال کنید.\n\n"
+    "فقط شماره موبایل معتبر ایران پذیرفته می‌شود.\n"
+    "شماره‌های ارسال‌شده به‌صورت دستی یا متعلق به شخص دیگر قابل قبول نیستند."
+)
+PHONE_OK_TEXT = (
+    "✅ شماره تلفن شما تأیید شد.\n\n"
+    "برای تکمیل احراز، لطفاً کپچای زیر را حل کنید."
+)
+CAPTCHA_PROMPT = "🤖 برای ادامه پاسخ صحیح را انتخاب کنید:\n\n<b>{question}</b>"
+VERIFIED_TEXT = (
+    "✅ احراز شما با موفقیت تکمیل شد.\n"
+    "اکنون می‌توانید از امکانات ربات استفاده کنید."
+)
+PRIVATE_ONLY_TEXT = (
+    "📱 برای تکمیل احراز هویت، لطفاً در گفت‌وگوی خصوصی ربات دستور /start را بزنید."
+)
 
 
 def _is_admin(user: User | None, tg_id: int) -> bool:
@@ -46,17 +68,32 @@ async def _send_welcome(message: Message, services: Services, is_admin: bool) ->
 
 
 async def process_pending_referral(services: Services, bot, invitee: User) -> None:
-    """Pay out a referral captured at /start, once the invitee is past any gate.
+    """Pay out a referral captured at /start, once the invitee is fully verified.
 
-    Safe to call from every post-/start entry point (deep-link start, plain
-    start, or the «✅ عضو شدم» channel-join check): it no-ops unless the invitee
-    has a pending referral code and no referrer yet. On a payout it commits the
-    credit *before* announcing it, then DMs the referrer and notifies the admins.
+    Safe to call from every post-onboarding entry point: it no-ops unless the
+    invitee has completed verification, still carries a pending referral code and
+    has no referrer yet. On a payout it commits the credit *before* announcing
+    it, then DMs the referrer and notifies the admins.
     """
     result = await services.referral.process_pending(invitee)
     if not result.rewarded:
         return
     await services.commit()
+    await announce_referral(services, bot, invitee, result)
+
+
+async def announce_referral(
+    services: Services, bot, invitee: User, result: ReferralResult
+) -> None:
+    """Post-commit notifications for a paid referral (referrer + admins + log).
+
+    Deliberately separate from the payout and always called *after* the commit:
+    a failed Telegram send must never roll back a credited wallet.
+    ``NotificationService`` never raises, so a blocked referrer cannot break the
+    invitee's own flow either. The invitee's phone number is never included.
+    """
+    if not result.rewarded:
+        return
     notifier = NotificationService(bot)
     # One shared formatter for both parties → «id | @username» or, with no
     # username, «id | <tappable profile name>». The invitee is a full User; the
@@ -95,6 +132,71 @@ async def process_pending_referral(services: Services, bot, invitee: User) -> No
     )
 
 
+async def prompt_phone(message: Message) -> None:
+    """Ask for the contact — private chats only, where the button is valid."""
+    if message.chat.type != "private":
+        await message.answer(PRIVATE_ONLY_TEXT)
+        return
+    await safe_answer(message, ASK_PHONE_TEXT, reply_markup=request_contact_menu())
+
+
+async def prompt_captcha(
+    message: Message, services: Services, telegram_id: int
+) -> None:
+    """Issue and show a fresh challenge, replacing any previous one."""
+    challenge = await services.verification.issue_captcha(telegram_id)
+    await message.answer(
+        CAPTCHA_PROMPT.format(question=challenge.question),
+        reply_markup=captcha_menu(challenge.nonce, challenge.options),
+    )
+
+
+async def continue_onboarding(
+    message: Message,
+    services: Services,
+    user: User,
+    state: FSMContext,
+    bot,
+) -> bool:
+    """Advance *user* to their next onboarding step; ``True`` once verified.
+
+    The step is read from MySQL (:meth:`VerificationService.next_step`), never
+    from the FSM, so this is safe to call from any entry point — deep-link
+    /start, plain /start, or the «✅ عضو شدم» channel re-check — and after any
+    restart, FSM reset or Redis loss.
+
+    Admins bypass verification entirely. Their ``pending_referral_code`` is
+    therefore left untouched rather than paid out, because ``process_pending``
+    only settles verified invitees; staff accounts being referred is not a real
+    scenario, and skipping it keeps the exemption from creating an unverified
+    payout path.
+
+    Identity comes from ``user.telegram_id``, never from ``message.from_user``:
+    when called from the channel re-check the message belongs to a *callback*,
+    whose ``from_user`` is the bot itself.
+    """
+    if _is_admin(user, user.telegram_id):
+        await state.clear()
+        await _send_welcome(message, services, True)
+        return True
+
+    step = services.verification.next_step(user)
+    if step is OnboardingStep.PHONE:
+        await state.set_state(VerificationFlow.waiting_phone)
+        await prompt_phone(message)
+        return False
+    if step is OnboardingStep.CAPTCHA:
+        await state.set_state(VerificationFlow.waiting_captcha)
+        await prompt_captcha(message, services, user.telegram_id)
+        return False
+
+    # Verified: settle any referral still pending (idempotent) and open the menu.
+    await state.clear()
+    await process_pending_referral(services, bot, user)
+    await _send_welcome(message, services, _is_admin(user, user.telegram_id))
+    return True
+
+
 @router.message(CommandStart(deep_link=True))
 async def start_with_ref(
     message: Message,
@@ -105,11 +207,9 @@ async def start_with_ref(
 ) -> None:
     await state.clear()
     # The deep-link payload was captured into pending_referral_code by the DB
-    # middleware (new users only); pay it out now that we're past any gate. The
-    # anti-abuse guards live in ReferralService (referred only once, no self-
-    # invite, never re-pays a user who already has a referrer).
-    await process_pending_referral(services, bot, db_user)
-    await _send_welcome(message, services, _is_admin(db_user, message.from_user.id))
+    # middleware (new users only). It is *not* paid out here: the referral is
+    # settled only once verification completes, so this just starts onboarding.
+    await continue_onboarding(message, services, db_user, state, bot)
 
 
 @router.message(CommandStart())
@@ -122,10 +222,9 @@ async def start(
     db_user_created: bool = False,
 ) -> None:
     await state.clear()
-    # A user gated on their first /start <code> still carries the pending code;
-    # a plain /start after they join is another chance to pay it out.
-    await process_pending_referral(services, bot, db_user)
-    await _send_welcome(message, services, _is_admin(db_user, message.from_user.id))
+    # Resumes wherever the user left off; pays a pending referral only if they
+    # are already fully verified.
+    await continue_onboarding(message, services, db_user, state, bot)
     if db_user_created:
         await NotificationService(bot).log_event(
             "کاربر جدید",

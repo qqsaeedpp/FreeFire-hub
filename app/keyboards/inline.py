@@ -27,6 +27,7 @@ from app.keyboards.callbacks import (
     PayMethodCB,
     TicketCB,
     TutorialCB,
+    VerificationCB,
     WalletTopUpCB,
 )
 from app.keyboards.style import (
@@ -50,6 +51,25 @@ def back_cancel(target: str = "main") -> InlineKeyboardMarkup:
 def cancel_only() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="❌ لغو", callback_data=NavCB(action="cancel"))
+    return kb.as_markup()
+
+
+def captcha_menu(nonce: str, options) -> InlineKeyboardMarkup:
+    """The four answer buttons for one math captcha, on a single row.
+
+    Only the challenge ``nonce`` and the tapped number travel in the callback —
+    the correct answer stays server-side in Redis, so it cannot be read off the
+    button payload.
+    """
+    kb = InlineKeyboardBuilder()
+    for option in options:
+        kb.button(
+            text=str(option),
+            callback_data=VerificationCB(
+                action="answer", nonce=nonce, choice=option
+            ),
+        )
+    kb.adjust(4)
     return kb.as_markup()
 
 
