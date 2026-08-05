@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -20,6 +21,7 @@ from app.core.security import decrypt
 from app.filters.admin import IsAdmin
 from app.keyboards.callbacks import AdminCB, AdminOrderCB
 from app.keyboards.inline import (
+    cancel_only,
     order_details_actions,
     pending_kind_menu,
     pending_order_actions,
@@ -28,7 +30,7 @@ from app.keyboards.inline import (
 )
 from app.models.user import User
 from app.services.notification_service import NotificationService
-from app.states.admin_states import RejectReasonFlow
+from app.states.admin_states import OrderMessageFlow, RejectReasonFlow
 from app.utils.helpers import edit_or_answer, format_toman, paginate_meta, user_ref
 
 router = Router(name="admin_orders")
@@ -491,6 +493,79 @@ async def reject_finish(
         except Exception:  # noqa: BLE001 - message gone / not modified
             pass
     await state.clear()
+
+
+# --------------------- direct message to the order's buyer ---------------------
+@router.callback_query(AdminOrderCB.filter(F.action == "msg"), IsAdmin())
+async def order_message_start(
+    callback: CallbackQuery,
+    callback_data: AdminOrderCB,
+    services: Services,
+    state: FSMContext,
+) -> None:
+    """Ask the admin for the text to DM the buyer of this order.
+
+    The buyer is resolved from the order itself, so the admin never has to look
+    up an id. Nothing about the order changes — this is a pure side-channel.
+    """
+    order = await services.order.get(callback_data.order_id)
+    if order is None:
+        await callback.answer("سفارش یافت نشد.", show_alert=True)
+        return
+    user = await services.users.get(order.user_id)
+    if user is None:
+        await callback.answer("کاربر این سفارش یافت نشد.", show_alert=True)
+        return
+
+    await state.set_state(OrderMessageFlow.entering_message)
+    await state.update_data(msg_target_tg_id=user.telegram_id, msg_order_id=order.id)
+    # Sent as a new message (not an edit) so the order card stays on screen for
+    # reference while the admin types the reply.
+    await callback.message.answer(
+        f"💬 متن پیامی که برای کاربر سفارش <b>#{order.id}</b> ارسال شود را بنویسید:\n\n"
+        f"👤 گیرنده:\n{user_ref(user)}",
+        reply_markup=cancel_only(),
+    )
+    await callback.answer()
+
+
+@router.message(OrderMessageFlow.entering_message, F.text, IsAdmin())
+async def order_message_send(
+    message: Message, services: Services, state: FSMContext, bot
+) -> None:
+    """Deliver the composed text to the buyer's private chat."""
+    data = await state.get_data()
+    tg_id = int(data.get("msg_target_tg_id") or 0)
+    order_id = int(data.get("msg_order_id") or 0)
+    await state.clear()
+    if not tg_id:
+        await message.answer("❌ گیرنده مشخص نیست. دوباره از روی سفارش تلاش کنید.")
+        return
+
+    # ``html_text`` keeps the admin's own formatting (bold, links, …) intact.
+    try:
+        await bot.send_message(
+            tg_id,
+            f"📩 <b>پیام پشتیبانی درباره سفارش #{order_id}</b>\n\n{message.html_text}",
+        )
+    except TelegramAPIError:
+        # Almost always «bot was blocked by the user» / deactivated account.
+        await message.answer(
+            "❌ ارسال پیام ناموفق بود (کاربر ربات را بلاک کرده یا در دسترس نیست)."
+        )
+        return
+
+    await message.answer(f"✅ پیام برای کاربر سفارش #{order_id} ارسال شد.")
+    await NotificationService(bot).log_event(
+        "پیام به کاربر",
+        {"سفارش": f"#{order_id}", "کاربر": f"<code>{tg_id}</code>"},
+    )
+
+
+@router.message(OrderMessageFlow.entering_message, IsAdmin())
+async def order_message_not_text(message: Message) -> None:
+    """Guard the flow against photos/files — only text is forwarded."""
+    await message.answer("لطفاً پیام را به‌صورت متن بنویسید.", reply_markup=cancel_only())
 
 
 async def _refresh(callback: CallbackQuery, order_id: int, completed: bool = False) -> None:

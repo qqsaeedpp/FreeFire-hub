@@ -492,7 +492,8 @@ def admin_order_review(order_id: int) -> InlineKeyboardMarkup:
     kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id), **style_kwargs(STYLE_DANGER))
     kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id), **style_kwargs(STYLE_PRIMARY))
     kb.button(text="👁 جزئیات سفارش", callback_data=AdminOrderCB(action="details", order_id=order_id))
-    kb.adjust(2, 1, 1)
+    kb.button(text="💬 ارسال پیام به کاربر", callback_data=AdminOrderCB(action="msg", order_id=order_id))
+    kb.adjust(2, 1, 1, 1)
     return kb.as_markup()
 
 
@@ -567,14 +568,16 @@ def pending_order_actions(
         # Approved orders only get completed — no re-approve / re-reject here.
         kb.button(text="🏁 تکمیل سفارش", callback_data=AdminOrderCB(action="complete", order_id=order_id, page=page, kind=kind, group=group), **style_kwargs(STYLE_SUCCESS))
         kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page, kind=kind, group=group))
+        kb.button(text="💬 ارسال پیام به کاربر", callback_data=AdminOrderCB(action="msg", order_id=order_id, page=page, kind=kind, group=group))
         kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page, kind=kind, group=group))
-        kb.adjust(1, 1, 1)
+        kb.adjust(1, 1, 1, 1)
     else:
         kb.button(text="✅ تایید", callback_data=AdminOrderCB(action="approve", order_id=order_id, page=page, kind=kind, group=group), **style_kwargs(STYLE_SUCCESS))
         kb.button(text="❌ رد", callback_data=AdminOrderCB(action="reject", order_id=order_id, page=page, kind=kind, group=group), **style_kwargs(STYLE_DANGER))
         kb.button(text="👁 جزئیات", callback_data=AdminOrderCB(action="details", order_id=order_id, page=page, kind=kind, group=group))
+        kb.button(text="💬 ارسال پیام به کاربر", callback_data=AdminOrderCB(action="msg", order_id=order_id, page=page, kind=kind, group=group))
         kb.button(text="⬅️ بازگشت به لیست", callback_data=AdminOrderCB(action="page", page=page, kind=kind, group=group))
-        kb.adjust(2, 1, 1)
+        kb.adjust(2, 1, 1, 1)
     return kb.as_markup()
 
 

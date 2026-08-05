@@ -121,6 +121,17 @@ class UserManageFlow(StatesGroup):
     entering_ban_reason = State()
 
 
+class OrderMessageFlow(StatesGroup):
+    """Compose a direct message to the buyer from an order card.
+
+    Deliberately separate from ``UserManageFlow.entering_message`` (the user
+    search card): that flow returns the admin to the user card afterwards, while
+    this one belongs to the order screens and must not disturb it.
+    """
+
+    entering_message = State()
+
+
 class BackupTargetFlow(StatesGroup):
     """Capture the backup destination id (numeric user id or channel id)."""
 
