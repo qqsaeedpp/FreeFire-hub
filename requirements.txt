@@ -28,8 +28,6 @@ python-dotenv==1.0.1
 Pillow==11.0.0
 tenacity==9.0.0           # retry mechanism
 
-# --- Tests ---
-pytest==8.3.3
-pytest-asyncio==0.24.0
-aiosqlite==0.20.0         # in-memory db for unit tests
-fakeredis[lua]==2.37.0    # in-process Redis (real Lua) for captcha tests
+# Test-only dependencies live in requirements-dev.txt on purpose: `lupa` (pulled
+# in by fakeredis[lua]) compiles Lua from C source, which added ~10 minutes to
+# every Docker build for something the running bot never imports.

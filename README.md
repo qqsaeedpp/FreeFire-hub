@@ -175,11 +175,15 @@ python -m app.main
 ## 🧪 تست
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 pytest -q
 ```
 
 تست‌ها روی SQLite در حافظه اجرا می‌شوند و نیازی به MySQL ندارند.
+
+> ابزارهای تست عمداً در `requirements-dev.txt` جدا شده‌اند و داخل ایمیج Docker
+> نصب نمی‌شوند: وابستگی `lupa` باید از سورس C کامپایل شود و بیلد سرور را حدود
+> ۱۰ دقیقه کندتر می‌کرد، در حالی که ربات هرگز آن را import نمی‌کند.
 
 ---
 

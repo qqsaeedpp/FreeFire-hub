@@ -1,0 +1,13 @@
+# Test-only dependencies. NOT installed into the Docker image — the running bot
+# never imports them, and `lupa` (a C extension that compiles Lua from source)
+# made every production build ~10 minutes slower.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest -q
+
+-r requirements.txt
+
+pytest==8.3.3
+pytest-asyncio==0.24.0
+aiosqlite==0.20.0         # in-memory db for unit tests
+fakeredis[lua]==2.37.0    # in-process Redis with real Lua, for the captcha tests
