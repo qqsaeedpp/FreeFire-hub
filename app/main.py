@@ -17,6 +17,7 @@ from app.middlewares.ban import BanMiddleware
 from app.middlewares.channel_lock import ChannelLockMiddleware
 from app.middlewares.database import DatabaseMiddleware
 from app.middlewares.menu_reset import MenuResetMiddleware
+from app.middlewares.private_only import PrivateOnlyMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
 from app.middlewares.verification import VerificationMiddleware
 from app.scheduler.tasks import setup_scheduler
@@ -30,7 +31,10 @@ def build_dispatcher() -> Dispatcher:
     storage = RedisStorage(redis=redis_client)
     dp = Dispatcher(storage=storage)
 
-    # Order matters: throttle -> db (load user) -> ban-check.
+    # Order matters: private-only -> throttle -> db (load user) -> ban-check.
+    # The private-chat gate runs first so group/channel updates never reach the
+    # database or the lock/verification gates (which would reply in the group).
+    dp.update.outer_middleware(PrivateOnlyMiddleware())
     dp.update.outer_middleware(ThrottlingMiddleware())
     dp.update.outer_middleware(DatabaseMiddleware())
     dp.update.outer_middleware(BanMiddleware())

@@ -36,6 +36,37 @@ class ChannelAccessError(Exception):
     """Raised when a channel can't be resolved or the bot lacks access to it."""
 
 
+def _parse_identifier(identifier: str) -> str | int:
+    """Turn admin input into something ``getChat`` accepts.
+
+    Handles ``@name``, ``https://t.me/name``, ``t.me/name`` and numeric ids.
+    Private *invite* links (``t.me/+hash`` or ``/joinchat/hash``) are rejected
+    with guidance: Telegram offers no way to resolve them to a chat id, so the
+    admin must forward a post from the channel instead.
+    """
+    identifier = identifier.strip()
+    if not identifier:
+        raise ChannelAccessError("شناسه کانال خالی است.")
+
+    if identifier.lstrip("-").isdigit():
+        return int(identifier)
+
+    tail = identifier
+    if "t.me/" in identifier:
+        tail = identifier.rstrip("/").split("t.me/", 1)[1]
+    tail = tail.lstrip("@")
+
+    if tail.startswith("+") or tail.startswith("joinchat/"):
+        raise ChannelAccessError(
+            "لینک دعوت خصوصی قابل بررسی نیست.\n\n"
+            "برای افزودن کانال خصوصی، یک <b>پست از همان کانال</b> را برای ربات "
+            "فوروارد کنید یا آیدی عددی کانال را بفرستید."
+        )
+    if not tail:
+        raise ChannelAccessError("شناسه کانال خالی است.")
+    return "@" + tail
+
+
 @dataclass
 class ResolvedChannel:
     title: str
@@ -68,12 +99,23 @@ class ChannelLockService:
         return channel.is_active
 
     async def add_channel(self, bot: Bot, identifier: str) -> LockedChannel:
-        """Resolve ``identifier`` (numeric id or @username) and store it.
+        """Resolve ``identifier`` (numeric id, @username or public link) and store it.
 
         Raises ``ChannelAccessError`` if the channel can't be resolved or the
         bot isn't a member/admin there (so an unusable channel is never saved).
         """
-        resolved = await self._resolve(bot, identifier)
+        return await self._store(await self._resolve(bot, _parse_identifier(identifier)))
+
+    async def add_channel_by_id(self, bot: Bot, chat_id: int) -> LockedChannel:
+        """Store a channel whose numeric id is already known.
+
+        This is the path for **private** channels: they have no @username, so the
+        admin registers one by forwarding any post from it and the handler passes
+        the origin chat id straight through.
+        """
+        return await self._store(await self._resolve(bot, chat_id))
+
+    async def _store(self, resolved: ResolvedChannel) -> LockedChannel:
         existing = await self.repo.get_by_chat_id(resolved.chat_id)
         if existing is not None:
             # Re-activate / refresh an already-known channel instead of duplicating.
@@ -92,28 +134,14 @@ class ChannelLockService:
         )
         return await self.repo.add(channel)
 
-    async def _resolve(self, bot: Bot, identifier: str) -> ResolvedChannel:
-        identifier = identifier.strip()
-        if not identifier:
-            raise ChannelAccessError("شناسه کانال خالی است.")
-        # Accept "@name", "https://t.me/name", "t.me/name" or a numeric id.
-        key: str | int = identifier
-        if identifier.startswith("http"):
-            identifier = identifier.rstrip("/").split("/")[-1]
-            key = "@" + identifier.lstrip("@")
-        elif identifier.startswith("@"):
-            key = identifier
-        elif identifier.lstrip("-").isdigit():
-            key = int(identifier)
-        else:
-            key = "@" + identifier
-
+    async def _resolve(self, bot: Bot, key: str | int) -> ResolvedChannel:
         try:
             chat = await bot.get_chat(key)
         except Exception as exc:  # noqa: BLE001 - surface a friendly message
             raise ChannelAccessError(
                 "کانال پیدا نشد یا ربات به آن دسترسی ندارد. مطمئن شوید ربات "
-                "داخل کانال عضو/ادمین است و شناسه درست است."
+                "داخل کانال عضو/ادمین است و شناسه درست است.\n\n"
+                "برای کانال خصوصی، یک پست از همان کانال را فوروارد کنید."
             ) from exc
 
         if not await self.check_bot_access(bot, chat.id):
@@ -123,23 +151,73 @@ class ChannelLockService:
             )
 
         username = chat.username
-        invite_link: str | None = None
         if username:
-            invite_link = f"https://t.me/{username}"
-        else:
-            invite_link = getattr(chat, "invite_link", None)
-            if not invite_link:
-                try:
-                    created = await bot.create_chat_invite_link(chat.id)
-                    invite_link = created.invite_link
-                except Exception:  # noqa: BLE001 - link is optional
-                    invite_link = None
+            # Public channel: the @username link always works and never expires.
+            return ResolvedChannel(
+                title=chat.title or username,
+                chat_id=chat.id,
+                username=username,
+                invite_link=f"https://t.me/{username}",
+            )
+
+        # Private channel: an invite link is the ONLY way a user can join, so a
+        # missing link makes the lock impossible to satisfy — refuse to save it
+        # rather than showing users a channel they cannot reach.
+        invite_link = await self._invite_link(bot, chat)
+        if not invite_link:
+            raise ChannelAccessError(
+                "این کانال خصوصی است و ربات نتوانست لینک دعوت بسازد.\n\n"
+                "ربات را در کانال <b>ادمین</b> کنید و دسترسی "
+                "«<b>افزودن اعضا / Invite Users via Link</b>» را به آن بدهید، "
+                "سپس دوباره تلاش کنید."
+            )
         return ResolvedChannel(
-            title=chat.title or username or str(chat.id),
+            title=chat.title or str(chat.id),
             chat_id=chat.id,
-            username=username,
+            username=None,
             invite_link=invite_link,
         )
+
+    @staticmethod
+    async def _invite_link(bot: Bot, chat) -> str | None:
+        """Best-effort invite link for a private chat.
+
+        Prefers the channel's primary link (visible to admins via ``getChat``)
+        and otherwise mints a fresh one, which needs the ``can_invite_users``
+        admin right.
+        """
+        existing = getattr(chat, "invite_link", None)
+        if existing:
+            return existing
+        try:
+            created = await bot.create_chat_invite_link(chat.id)
+            return created.invite_link
+        except Exception:  # noqa: BLE001 - bot lacks the invite permission
+            return None
+
+    async def refresh_invite_link(self, bot: Bot, channel: LockedChannel) -> str | None:
+        """Re-fetch the join link for a stored channel and persist it.
+
+        Private-channel invite links can be revoked in the channel settings, which
+        would silently leave users unable to satisfy the lock; this lets an admin
+        mint a working link again without re-adding the channel.
+        """
+        try:
+            chat = await bot.get_chat(channel.chat_id)
+        except Exception:  # noqa: BLE001 - unreachable channel
+            return None
+        link = (
+            f"https://t.me/{chat.username}"
+            if chat.username
+            else await self._invite_link(bot, chat)
+        )
+        if not link:
+            return None
+        channel.username = chat.username
+        channel.invite_link = link
+        channel.title = chat.title or channel.title
+        await self.repo.session.flush()
+        return link
 
     # --------------------------- access checks ---------------------------
     async def check_bot_access(self, bot: Bot, chat_id: int) -> bool:

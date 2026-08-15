@@ -48,6 +48,13 @@ def _detail_markup(channel: LockedChannel) -> InlineKeyboardMarkup:
         text="🧪 تست دسترسی ربات",
         callback_data=ChannelCB(action="test", channel_id=channel.id),
     )
+    if not channel.username:
+        # Private channels join via an invite link, which an admin can revoke in
+        # the channel settings — this mints a working one again.
+        kb.button(
+            text="🔄 تازه‌سازی لینک عضویت",
+            callback_data=ChannelCB(action="refresh", channel_id=channel.id),
+        )
     kb.button(
         text="🗑 حذف",
         callback_data=ChannelCB(action="confirm_delete", channel_id=channel.id),
@@ -59,15 +66,23 @@ def _detail_markup(channel: LockedChannel) -> InlineKeyboardMarkup:
 
 def _detail_text(channel: LockedChannel) -> str:
     status = "🟢 فعال" if channel.is_active else "🔴 غیرفعال"
+    kind = "🔓 عمومی" if channel.username else "🔒 خصوصی"
     username = f"@{channel.username}" if channel.username else "-"
-    link = channel.invite_link or "-"
-    return (
+    link = channel.invite_link or "❌ ندارد"
+    text = (
         f"📢 <b>{channel.title}</b>\n\n"
         f"وضعیت: {status}\n"
+        f"نوع کانال: {kind}\n"
         f"آیدی عددی: <code>{channel.chat_id}</code>\n"
         f"یوزرنیم: {username}\n"
         f"لینک عضویت: {link}"
     )
+    if not channel.invite_link:
+        text += (
+            "\n\n⚠️ بدون لینک عضویت، کاربران نمی‌توانند عضو شوند. "
+            "با دکمه «تازه‌سازی لینک عضویت» دوباره تلاش کنید."
+        )
+    return text
 
 
 async def _show_list(services: Services, message: Message) -> None:
@@ -116,25 +131,62 @@ async def channel_add_start(callback: CallbackQuery, state: FSMContext) -> None:
     await edit_or_answer(
         callback.message,
         "➕ <b>افزودن کانال قفل</b>\n\n"
-        "آیدی عددی، یوزرنیم (@channel) یا لینک کانال را ارسال کنید.\n\n"
-        "⚠️ ربات باید قبلاً داخل کانال عضو/ادمین شده باشد.",
+        "🔓 <b>کانال عمومی:</b> یوزرنیم (@channel)، لینک یا آیدی عددی را بفرستید.\n\n"
+        "🔒 <b>کانال خصوصی:</b> یک <b>پست از همان کانال</b> را به اینجا "
+        "<b>فوروارد</b> کنید.\n"
+        "(لینک دعوت <code>t.me/+...</code> کار نمی‌کند؛ تلگرام اجازه بررسی آن را نمی‌دهد.)\n\n"
+        "⚠️ ربات باید در کانال <b>ادمین</b> باشد. برای کانال خصوصی، دسترسی "
+        "«افزودن اعضا» هم لازم است تا ربات بتواند لینک عضویت بسازد.",
         reply_markup=cancel_only(),
     )
     await callback.answer()
 
 
-@router.message(ChannelLockFlow.entering_channel, F.text, IsAdmin())
+def _forwarded_chat_id(message: Message) -> int | None:
+    """Origin chat id of a forwarded channel post, or ``None``.
+
+    Reads the modern ``forward_origin`` (Bot API 7+) and falls back to the legacy
+    ``forward_from_chat`` field. Returns ``None`` when the origin is hidden — the
+    channel forbids forwarding attribution — so the caller can explain the
+    numeric-id alternative.
+    """
+    origin = message.forward_origin
+    chat = getattr(origin, "chat", None) if origin is not None else None
+    if chat is None:
+        chat = message.forward_from_chat
+    return chat.id if chat is not None else None
+
+
+@router.message(ChannelLockFlow.entering_channel, IsAdmin())
 async def channel_add_save(
     message: Message, services: Services, state: FSMContext, bot
 ) -> None:
+    """Register a channel from a forwarded post (private) or typed id (public)."""
+    forwarded_id = _forwarded_chat_id(message)
     try:
-        channel = await services.channel.add_channel(bot, message.text)
+        if forwarded_id is not None:
+            channel = await services.channel.add_channel_by_id(bot, forwarded_id)
+        elif message.text:
+            channel = await services.channel.add_channel(bot, message.text)
+        else:
+            await message.answer(
+                "❌ ورودی نامعتبر است.\n\n"
+                "یوزرنیم/لینک/آیدی عددی کانال را بفرستید، یا یک پست از کانال "
+                "خصوصی را فوروارد کنید.\n"
+                "اگر فوروارد کردید و این پیام را می‌بینید، کانال «فوروارد با ذکر "
+                "منبع» را بسته است؛ در این حالت آیدی عددی کانال را بفرستید.",
+                reply_markup=cancel_only(),
+            )
+            return
     except ChannelAccessError as exc:
         await message.answer(f"❌ {exc}", reply_markup=cancel_only())
         return
     await services.commit()
     await state.clear()
-    await message.answer(f"✅ کانال «{channel.title}» با موفقیت ثبت شد.")
+    kind = "عمومی" if channel.username else "خصوصی"
+    await message.answer(
+        f"✅ کانال «{channel.title}» ({kind}) با موفقیت ثبت شد."
+    )
     await _show_list(services, message)
 
 
@@ -188,6 +240,31 @@ async def channel_test(
             "❌ ربات داخل این کانال عضو/ادمین نیست. ابتدا ربات را در کانال ادمین کنید.",
             show_alert=True,
         )
+
+
+# ----------------------------- refresh link -----------------------------
+@router.callback_query(ChannelCB.filter(F.action == "refresh"), IsAdmin())
+async def channel_refresh_link(
+    callback: CallbackQuery, callback_data: ChannelCB, services: Services, bot
+) -> None:
+    """Mint a fresh invite link for a private channel and save it."""
+    channel = await services.channel.get(callback_data.channel_id)
+    if channel is None:
+        await callback.answer("کانال یافت نشد.", show_alert=True)
+        return
+    link = await services.channel.refresh_invite_link(bot, channel)
+    if link is None:
+        await callback.answer(
+            "❌ ساخت لینک ممکن نشد. ربات را در کانال ادمین کنید و دسترسی "
+            "«افزودن اعضا» را به آن بدهید.",
+            show_alert=True,
+        )
+        return
+    await services.commit()
+    await callback.answer("✅ لینک عضویت به‌روزرسانی شد.")
+    await edit_or_answer(
+        callback.message, _detail_text(channel), reply_markup=_detail_markup(channel)
+    )
 
 
 # -------------------------------- delete --------------------------------
