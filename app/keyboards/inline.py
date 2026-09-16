@@ -262,15 +262,31 @@ def buy_account_menu() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def new_listing_announce_menu() -> InlineKeyboardMarkup:
-    """Glass CTA under a public «اکانت جدید» broadcast → opens the ready-made shop
-    list (the same ``AccountCB(action="ready")`` the buy-account submenu uses)."""
+def new_listing_announce_menu(
+    buy_url: str, view_url: str | None = None
+) -> InlineKeyboardMarkup:
+    """Glass CTAs under a public «اکانت جدید» broadcast, stacked like the shop's
+    own account card (green buy on top):
+
+    * 🟢 «خرید» → opens ``buy_url`` (the admin's private chat);
+    * 🔵 «مشاهده اکانت‌ها» → the ready-made shop list (the same
+      ``AccountCB(action="ready")`` the buy-account submenu uses).
+
+    A callback button is dead in a channel — the bot silently drops every
+    non-private update — so the channel mirror passes ``view_url`` (a link into
+    the bot) and «مشاهده اکانت‌ها» opens that instead.
+    """
     kb = InlineKeyboardBuilder()
-    kb.button(
-        text="🛒 مشاهده اکانت‌ها",
-        callback_data=AccountCB(action="ready"),
-        **style_kwargs(STYLE_PRIMARY),
-    )
+    kb.button(text="✅ خرید", url=buy_url, **style_kwargs(STYLE_SUCCESS))
+    if view_url:
+        kb.button(text="🛒 مشاهده اکانت‌ها", url=view_url, **style_kwargs(STYLE_PRIMARY))
+    else:
+        kb.button(
+            text="🛒 مشاهده اکانت‌ها",
+            callback_data=AccountCB(action="ready"),
+            **style_kwargs(STYLE_PRIMARY),
+        )
+    kb.adjust(1)
     return kb.as_markup()
 
 

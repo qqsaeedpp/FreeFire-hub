@@ -23,9 +23,19 @@ class Settings(BaseSettings):
     # Channel where lottery results are announced; defaults to the log channel.
     lottery_channel_id_raw: int | None = Field(None, alias="LOTTERY_CHANNEL_ID")
 
+    # Public channel that mirrors every admin «اکانت جدید برای فروش» announcement
+    # (same album, text and buttons as the users' broadcast). 0 disables the mirror.
+    listing_channel_id: int = Field(-1003783566987, alias="LISTING_CHANNEL_ID")
+    # Chat opened by the green «خرید» button under a new-listing announcement.
+    listing_buy_username: str = Field("ffshah_bot", alias="LISTING_BUY_USERNAME")
+
     @property
     def lottery_channel_id(self) -> int:
         return self.lottery_channel_id_raw or self.log_chat_id
+
+    @property
+    def listing_buy_url(self) -> str:
+        return f"https://t.me/{self.listing_buy_username.strip().lstrip('@')}"
 
     @cached_property
     def admin_ids(self) -> list[int]:

@@ -18,6 +18,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.container import Services
+from app.core.config import settings
 from app.core.constants import AccountStatus
 from app.core.database import get_sessionmaker
 from app.core.logger import get_logger
@@ -251,11 +252,12 @@ async def _finalize_listing(
                 f"✅ اکانت #{account.id} با موفقیت ثبت شد و در لیست خرید کاربران قابل مشاهده است."
             )
             # Additive notification layer: announce the new (buyer-visible) listing
-            # to every active user. Fire-and-forget so the admin's flow returns
-            # instantly; the account row, the shop list and the admin notification
-            # system are untouched. Only buyer-visible accounts are announced — the
-            # CTA opens the shop list, where a price-invalid account wouldn't show.
-            _broadcast_new_listing(bot, account)
+            # to every active user and mirror it into the public sales channel.
+            # Fire-and-forget so the admin's flow returns instantly; the account
+            # row, the shop list and the admin notification system are untouched.
+            # Only buyer-visible accounts are announced — the CTA opens the shop
+            # list, where a price-invalid account wouldn't show.
+            _broadcast_new_listing(bot, account, message.chat.id)
         else:
             await message.answer(
                 f"⚠️ اکانت #{account.id} ثبت شد اما به دلیل نداشتن قیمت معتبر "
@@ -408,7 +410,7 @@ async def _run_new_listing_broadcast(
         log.error("new_listing_broadcast_fetch_failed", account=account_id, error=str(exc))
         return
 
-    keyboard = new_listing_announce_menu()
+    keyboard = new_listing_announce_menu(settings.listing_buy_url)
     sent = 0
     failed = 0
     for tg_id in recipient_ids:
@@ -432,16 +434,69 @@ async def _run_new_listing_broadcast(
     )
 
 
-def _broadcast_new_listing(bot, account) -> None:
+async def _post_new_listing_to_channel(
+    bot,
+    account_id: int,
+    caption: str,
+    caption_entities,
+    images: list[str],
+    admin_chat_id: int,
+) -> None:
+    """Mirror the new-listing announcement into the public sales channel.
+
+    Goes through the same :func:`_deliver_announcement` as each user's copy, so the
+    channel gets the identical body, ordered album and CTAs — except that
+    «مشاهده اکانت‌ها» links into the bot, because a callback button is dead in a
+    channel. Runs as its own detached task, so the post goes out right away instead
+    of queueing behind the user broadcast. A failure (bot not an admin of the
+    channel, wrong id) is logged and reported to the posting admin: it never touches
+    the user broadcast, and never goes unnoticed.
+    """
+    channel_id = settings.listing_channel_id
+    if not channel_id:
+        return
+    try:
+        me = await bot.me()
+        keyboard = new_listing_announce_menu(
+            settings.listing_buy_url, view_url=f"https://t.me/{me.username}"
+        )
+        await _deliver_announcement(
+            bot, channel_id, caption, caption_entities, images, keyboard
+        )
+    except Exception as exc:  # noqa: BLE001 - the listing is saved; report and stop
+        log.error(
+            "new_listing_channel_post_failed",
+            account=account_id,
+            channel=channel_id,
+            error=str(exc),
+        )
+        await NotificationService(bot).notify_user(
+            admin_chat_id,
+            f"⚠️ اکانت #{account_id} در کانال منتشر نشد.\n"
+            "مطمئن شوید ربات ادمین کانال است و اجازهٔ ارسال پیام دارد.\n"
+            f"<code>{escape(str(exc))}</code>",
+        )
+        return
+    log.info("new_listing_channel_posted", account=account_id, channel=channel_id)
+
+
+def _broadcast_new_listing(bot, account, admin_chat_id: int) -> None:
     """Fire-and-forget public announcement of a freshly listed account.
 
     Reads the account's fields synchronously into a plain caption (+ its premium-
-    emoji entities) and ``file_id`` list (so the detached task never touches the ORM
-    object or its session), then spawns the send loop. Purely additive: it never
-    mutates the account, the shop list, or the existing admin notification system.
+    emoji entities) and ``file_id`` list (so the detached tasks never touch the ORM
+    object or its session), then spawns the channel mirror and the user send loop
+    side by side. Purely additive: it never mutates the account, the shop list, or
+    the existing admin notification system. ``admin_chat_id`` hears about a failed
+    channel post.
     """
     caption, caption_entities = _new_listing_content(account)
     images = parse_images(account.images)
+    _spawn(
+        _post_new_listing_to_channel(
+            bot, account.id, caption, caption_entities, images, admin_chat_id
+        )
+    )
     _spawn(
         _run_new_listing_broadcast(
             bot, account.id, caption, caption_entities, images
