@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     # Channel where lottery results are announced; defaults to the log channel.
     lottery_channel_id_raw: int | None = Field(None, alias="LOTTERY_CHANNEL_ID")
 
-    # Public channel that mirrors every admin «اکانت جدید برای فروش» announcement
-    # (same album, text and buttons as the users' broadcast). 0 disables the mirror.
-    listing_channel_id: int = Field(-1003783566987, alias="LISTING_CHANNEL_ID")
+    # Channels that mirror every new listing are managed from the admin panel
+    # («📢 مدیریت کانال‌ها ← 📣 کانال‌های تبلیغ», table ``ad_channels``); the old
+    # LISTING_CHANNEL_ID setting was carried into that list by migration 0022.
     # Chat opened by the green «خرید» button under a new-listing announcement.
     listing_buy_username: str = Field("ffshah_bot", alias="LISTING_BUY_USERNAME")
 

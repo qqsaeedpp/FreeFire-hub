@@ -119,6 +119,11 @@ class ChannelCB(CallbackData, prefix="chlock"):
     channel_id: int = 0
 
 
+class AdChannelCB(CallbackData, prefix="adch"):
+    action: str  # list | add | view | toggle | test | confirm_delete | delete
+    channel_id: int = 0
+
+
 class DepositCB(CallbackData, prefix="dep"):
     action: str  # home | view | edit_amount | edit_card | edit_holder
     # Nullable trailing field: aiogram unpacks an empty trailing segment as None,

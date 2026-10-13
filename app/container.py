@@ -14,6 +14,7 @@ from app.repositories.accounts import (
     AccountSaleRequestRepository,
     RequestedAccountRepository,
 )
+from app.repositories.ad_channels import AdChannelRepository
 from app.repositories.admins import AdminRepository
 from app.repositories.app_settings import AppSettingRepository
 from app.repositories.backup_settings import BackupSettingRepository
@@ -33,6 +34,7 @@ from app.repositories.users import UserRepository
 from app.repositories.wallets import WalletRepository
 from app.repositories.wallet_topup_requests import WalletTopUpRequestRepository
 from app.services.account_service import AccountService
+from app.services.ad_channel_service import AdChannelService
 from app.services.admin_service import AdminService
 from app.services.backup_service import BackupService
 from app.services.ban_service import BanService
@@ -75,6 +77,7 @@ class Services:
         self.tutorial_repo = TutorialMediaRepository(session)
         self.button_repo = ButtonSettingsRepository(session)
         self.locked_channels_repo = LockedChannelRepository(session)
+        self.ad_channels_repo = AdChannelRepository(session)
         self.deposit_repo = DepositSettingRepository(session)
         self.admins_repo = AdminRepository(session)
         self.banned_repo = BannedUserRepository(session)
@@ -113,6 +116,7 @@ class Services:
         self.tutorial = TutorialService(self.tutorial_repo)
         self.button = ButtonService(self.button_repo)
         self.channel = ChannelLockService(self.locked_channels_repo, redis_client)
+        self.ad_channel = AdChannelService(self.ad_channels_repo)
         self.deposit = DepositService(self.deposit_repo)
         self.admin = AdminService(self.admins_repo, self.users, redis_client)
         self.ban = BanService(self.banned_repo, self.users)

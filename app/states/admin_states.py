@@ -86,6 +86,12 @@ class ChannelLockFlow(StatesGroup):
     entering_channel = State()
 
 
+class AdChannelFlow(StatesGroup):
+    """Capture an advertising channel (forwarded post / @username / link / id)."""
+
+    entering_channel = State()
+
+
 class DepositSettingsFlow(StatesGroup):
     """Edit a deposit setting (amount / card number / card holder)."""
 

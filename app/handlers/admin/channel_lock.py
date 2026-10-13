@@ -32,7 +32,7 @@ def _list_markup(channels: list[LockedChannel]) -> InlineKeyboardMarkup:
             callback_data=ChannelCB(action="view", channel_id=ch.id),
         )
     kb.button(text="➕ افزودن کانال", callback_data=ChannelCB(action="add"))
-    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="back_home"))
+    kb.button(text="🔙 بازگشت", callback_data=AdminCB(action="channels"))
     kb.adjust(1)
     return kb.as_markup()
 

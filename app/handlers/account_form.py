@@ -252,7 +252,7 @@ async def _finalize_listing(
                 f"✅ اکانت #{account.id} با موفقیت ثبت شد و در لیست خرید کاربران قابل مشاهده است."
             )
             # Additive notification layer: announce the new (buyer-visible) listing
-            # to every active user and mirror it into the public sales channel.
+            # to every active user and mirror it into every advertising channel.
             # Fire-and-forget so the admin's flow returns instantly; the account
             # row, the shop list and the admin notification system are untouched.
             # Only buyer-visible accounts are announced — the CTA opens the shop
@@ -434,7 +434,18 @@ async def _run_new_listing_broadcast(
     )
 
 
-async def _post_new_listing_to_channel(
+async def _ad_channel_targets() -> list[tuple[int, str]]:
+    """Snapshot every active advertising channel as ``(chat_id, title)``.
+
+    Read in a short-lived session (like :func:`_active_recipient_ids`) so the send
+    loop afterwards never holds a database connection — it touches Telegram only.
+    """
+    async with get_sessionmaker()() as session:
+        channels = await Services(session).ad_channel.list_active()
+        return [(c.chat_id, c.title) for c in channels]
+
+
+async def _post_new_listing_to_channels(
     bot,
     account_id: int,
     caption: str,
@@ -442,42 +453,67 @@ async def _post_new_listing_to_channel(
     images: list[str],
     admin_chat_id: int,
 ) -> None:
-    """Mirror the new-listing announcement into the public sales channel.
+    """Mirror the new-listing announcement into every active advertising channel.
 
-    Goes through the same :func:`_deliver_announcement` as each user's copy, so the
-    channel gets the identical body, ordered album and CTAs — except that
+    The channels are the ones managed under «📢 مدیریت کانال‌ها ← 📣 کانال‌های
+    تبلیغ». Each goes through the same :func:`_deliver_announcement` as a user's
+    copy, so it gets the identical body, ordered album and CTAs — except that
     «مشاهده اکانت‌ها» links into the bot, because a callback button is dead in a
-    channel. Runs as its own detached task, so the post goes out right away instead
-    of queueing behind the user broadcast. A failure (bot not an admin of the
-    channel, wrong id) is logged and reported to the posting admin: it never touches
-    the user broadcast, and never goes unnoticed.
+    channel. Runs as its own detached task, so the posts go out right away instead
+    of queueing behind the user broadcast. One channel failing (bot no longer an
+    admin there, channel deleted) never stops the others; each failure is logged
+    and the posting admin gets one summary, so nothing fails unnoticed.
     """
-    channel_id = settings.listing_channel_id
-    if not channel_id:
-        return
     try:
+        targets = await _ad_channel_targets()
+        if not targets:
+            return
         me = await bot.me()
-        keyboard = new_listing_announce_menu(
-            settings.listing_buy_url, view_url=f"https://t.me/{me.username}"
-        )
-        await _deliver_announcement(
-            bot, channel_id, caption, caption_entities, images, keyboard
-        )
     except Exception as exc:  # noqa: BLE001 - the listing is saved; report and stop
-        log.error(
-            "new_listing_channel_post_failed",
-            account=account_id,
-            channel=channel_id,
-            error=str(exc),
+        log.error("new_listing_channels_setup_failed", account=account_id, error=str(exc))
+        await NotificationService(bot).notify_user(
+            admin_chat_id,
+            f"⚠️ آگهی اکانت #{account_id} در کانال‌های تبلیغ منتشر نشد.\n"
+            f"<code>{escape(str(exc)[:300])}</code>",
+        )
+        return
+
+    keyboard = new_listing_announce_menu(
+        settings.listing_buy_url, view_url=f"https://t.me/{me.username}"
+    )
+    failed: list[tuple[str, Exception]] = []
+    for chat_id, title in targets:
+        try:
+            await _deliver_announcement(
+                bot, chat_id, caption, caption_entities, images, keyboard
+            )
+        except Exception as exc:  # noqa: BLE001 - skip & report, keep posting
+            failed.append((title, exc))
+            log.error(
+                "new_listing_channel_post_failed",
+                account=account_id,
+                channel=chat_id,
+                error=str(exc),
+            )
+        await asyncio.sleep(_SEND_DELAY)
+    log.info(
+        "new_listing_channels_done",
+        account=account_id,
+        sent=len(targets) - len(failed),
+        failed=len(failed),
+    )
+    if failed:
+        lines = "\n".join(
+            f"• {escape(title)}: <code>{escape(str(exc)[:200])}</code>"
+            for title, exc in failed
         )
         await NotificationService(bot).notify_user(
             admin_chat_id,
-            f"⚠️ اکانت #{account_id} در کانال منتشر نشد.\n"
-            "مطمئن شوید ربات ادمین کانال است و اجازهٔ ارسال پیام دارد.\n"
-            f"<code>{escape(str(exc))}</code>",
+            f"⚠️ آگهی اکانت #{account_id} در این کانال‌های تبلیغ منتشر نشد:\n"
+            f"{lines}\n\n"
+            "مطمئن شوید ربات ادمین این کانال‌هاست و اجازهٔ ارسال پیام دارد "
+            "(«📢 مدیریت کانال‌ها ← 📣 کانال‌های تبلیغ ← 🧪 تست دسترسی ربات»).",
         )
-        return
-    log.info("new_listing_channel_posted", account=account_id, channel=channel_id)
 
 
 def _broadcast_new_listing(bot, account, admin_chat_id: int) -> None:
@@ -485,15 +521,15 @@ def _broadcast_new_listing(bot, account, admin_chat_id: int) -> None:
 
     Reads the account's fields synchronously into a plain caption (+ its premium-
     emoji entities) and ``file_id`` list (so the detached tasks never touch the ORM
-    object or its session), then spawns the channel mirror and the user send loop
-    side by side. Purely additive: it never mutates the account, the shop list, or
-    the existing admin notification system. ``admin_chat_id`` hears about a failed
-    channel post.
+    object or its session), then spawns the advertising-channel posts and the user
+    send loop side by side. Purely additive: it never mutates the account, the shop
+    list, or the existing admin notification system. ``admin_chat_id`` hears about
+    any failed channel post.
     """
     caption, caption_entities = _new_listing_content(account)
     images = parse_images(account.images)
     _spawn(
-        _post_new_listing_to_channel(
+        _post_new_listing_to_channels(
             bot, account.id, caption, caption_entities, images, admin_chat_id
         )
     )

@@ -1,5 +1,6 @@
 """SQLAlchemy ORM models."""
 from app.models.account import Account, AccountSaleRequest, RequestedAccount
+from app.models.ad_channel import AdChannel
 from app.models.admin import Admin
 from app.models.admin_log import AdminLog
 from app.models.app_setting import AppSetting
@@ -43,6 +44,7 @@ __all__ = [
     "AdminLog",
     "AppSetting",
     "LockedChannel",
+    "AdChannel",
     "DepositSetting",
     "Admin",
     "BannedUser",
