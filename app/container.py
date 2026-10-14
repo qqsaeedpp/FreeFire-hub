@@ -38,6 +38,7 @@ from app.services.ad_channel_service import AdChannelService
 from app.services.admin_service import AdminService
 from app.services.backup_service import BackupService
 from app.services.ban_service import BanService
+from app.services.buy_contact_service import BuyContactService
 from app.services.button_service import ButtonService
 from app.services.card_service import CardService
 from app.services.channel_lock_service import ChannelLockService
@@ -119,6 +120,8 @@ class Services:
         self.ad_channel = AdChannelService(self.ad_channels_repo)
         self.deposit = DepositService(self.deposit_repo)
         self.admin = AdminService(self.admins_repo, self.users, redis_client)
+        # Target of the green «خرید» button — reads the roster, so after ``admin``.
+        self.buy_contact = BuyContactService(self.settings, self.admin, self.users)
         self.ban = BanService(self.banned_repo, self.users)
         self.backup = BackupService(self.backup_repo)
 

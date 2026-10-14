@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     # Channels that mirror every new listing are managed from the admin panel
     # («📢 مدیریت کانال‌ها ← 📣 کانال‌های تبلیغ», table ``ad_channels``); the old
     # LISTING_CHANNEL_ID setting was carried into that list by migration 0022.
-    # Chat opened by the green «خرید» button under a new-listing announcement.
-    listing_buy_username: str = Field("ffshah_bot", alias="LISTING_BUY_USERNAME")
+    # Default chat the green «خرید» button under a new-listing announcement opens,
+    # used until the owner picks an admin in «👮 مدیریت ادمین‌ها ← 🛒 ادمین دکمهٔ خرید».
+    listing_buy_username: str = Field("vasete_shah", alias="LISTING_BUY_USERNAME")
 
     @property
     def lottery_channel_id(self) -> int:

@@ -25,6 +25,8 @@ from app.repositories.app_settings import AppSettingRepository
 KEY_REFERRAL_REWARD = "referral_reward"
 KEY_DIAMOND_PLANS = "diamond_plans"
 KEY_LEVELUP_ALL_PRICE = "diamond_levelup_all_price"
+# Telegram id of the admin the green «✅ خرید» button opens ("" = the default).
+KEY_LISTING_BUY_ADMIN = "listing_buy_admin_id"
 
 
 class SettingsService:

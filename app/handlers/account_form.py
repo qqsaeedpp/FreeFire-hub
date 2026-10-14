@@ -257,7 +257,9 @@ async def _finalize_listing(
             # row, the shop list and the admin notification system are untouched.
             # Only buyer-visible accounts are announced — the CTA opens the shop
             # list, where a price-invalid account wouldn't show.
-            _broadcast_new_listing(bot, account, message.chat.id)
+            _broadcast_new_listing(
+                bot, account, message.chat.id, await _buy_url(services)
+            )
         else:
             await message.answer(
                 f"⚠️ اکانت #{account.id} ثبت شد اما به دلیل نداشتن قیمت معتبر "
@@ -301,6 +303,16 @@ async def _notify_admin_new_listing(bot, services: Services, account, seller: Us
 
 
 # ===================== PUBLIC NEW-LISTING BROADCAST =====================
+async def _buy_url(services: Services) -> str:
+    """Link behind the green «خرید» CTA — the admin the owner picked in
+    «👮 مدیریت ادمین‌ها», else the default. Never blocks the announcement."""
+    try:
+        return await services.buy_contact.url()
+    except Exception as exc:  # noqa: BLE001 - fall back rather than lose the listing
+        log.warning("buy_contact_lookup_failed", error=str(exc))
+        return settings.listing_buy_url
+
+
 def _new_listing_caption(account) -> str:
     """Public «اکانت جدید برای فروش اضافه شد» announcement body (HTML-safe).
 
@@ -395,7 +407,12 @@ async def _deliver_announcement(
 
 
 async def _run_new_listing_broadcast(
-    bot, account_id: int, caption: str, caption_entities, images: list[str]
+    bot,
+    account_id: int,
+    caption: str,
+    caption_entities,
+    images: list[str],
+    buy_url: str,
 ) -> None:
     """Deliver the new-listing announcement to every active user.
 
@@ -410,7 +427,7 @@ async def _run_new_listing_broadcast(
         log.error("new_listing_broadcast_fetch_failed", account=account_id, error=str(exc))
         return
 
-    keyboard = new_listing_announce_menu(settings.listing_buy_url)
+    keyboard = new_listing_announce_menu(buy_url)
     sent = 0
     failed = 0
     for tg_id in recipient_ids:
@@ -452,6 +469,7 @@ async def _post_new_listing_to_channels(
     caption_entities,
     images: list[str],
     admin_chat_id: int,
+    buy_url: str,
 ) -> None:
     """Mirror the new-listing announcement into every active advertising channel.
 
@@ -478,9 +496,7 @@ async def _post_new_listing_to_channels(
         )
         return
 
-    keyboard = new_listing_announce_menu(
-        settings.listing_buy_url, view_url=f"https://t.me/{me.username}"
-    )
+    keyboard = new_listing_announce_menu(buy_url, view_url=f"https://t.me/{me.username}")
     failed: list[tuple[str, Exception]] = []
     for chat_id, title in targets:
         try:
@@ -516,7 +532,7 @@ async def _post_new_listing_to_channels(
         )
 
 
-def _broadcast_new_listing(bot, account, admin_chat_id: int) -> None:
+def _broadcast_new_listing(bot, account, admin_chat_id: int, buy_url: str) -> None:
     """Fire-and-forget public announcement of a freshly listed account.
 
     Reads the account's fields synchronously into a plain caption (+ its premium-
@@ -524,17 +540,17 @@ def _broadcast_new_listing(bot, account, admin_chat_id: int) -> None:
     object or its session), then spawns the advertising-channel posts and the user
     send loop side by side. Purely additive: it never mutates the account, the shop
     list, or the existing admin notification system. ``admin_chat_id`` hears about
-    any failed channel post.
+    any failed channel post; ``buy_url`` is where every copy's «خرید» leads.
     """
     caption, caption_entities = _new_listing_content(account)
     images = parse_images(account.images)
     _spawn(
         _post_new_listing_to_channels(
-            bot, account.id, caption, caption_entities, images, admin_chat_id
+            bot, account.id, caption, caption_entities, images, admin_chat_id, buy_url
         )
     )
     _spawn(
         _run_new_listing_broadcast(
-            bot, account.id, caption, caption_entities, images
+            bot, account.id, caption, caption_entities, images, buy_url
         )
     )

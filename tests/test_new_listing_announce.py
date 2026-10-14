@@ -6,13 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.config import Settings, settings
+from app.core.config import Settings
 from app.handlers import account_form
 from app.handlers.account_form import _VIEW_PROMPT, _post_new_listing_to_channels
 from app.keyboards.callbacks import AccountCB
 from app.keyboards.inline import new_listing_announce_menu
 
 ADMIN_CHAT = 42
+BUY = "https://t.me/picked_admin"
 
 
 class FakeBot:
@@ -83,8 +84,8 @@ def test_buy_url_tolerates_at_sign(username):
     assert configured.listing_buy_url == "https://t.me/ffshah_bot"
 
 
-def test_buy_url_defaults_to_the_admin_chat():
-    assert Settings(_env_file=None).listing_buy_url == "https://t.me/ffshah_bot"
+def test_buy_url_defaults_to_vasete_shah():
+    assert Settings(_env_file=None).listing_buy_url == "https://t.me/vasete_shah"
 
 
 @pytest.mark.asyncio
@@ -92,7 +93,7 @@ async def test_every_ad_channel_gets_the_same_album_and_text(monkeypatch):
     _targets(monkeypatch, [(-1001, "A"), (-1002, "B")])
     bot = FakeBot()
 
-    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1", "f2"], ADMIN_CHAT)
+    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1", "f2"], ADMIN_CHAT, BUY)
 
     assert [(kind, chat) for kind, chat, *_ in bot.calls] == [
         ("album", -1001),
@@ -109,7 +110,7 @@ async def test_every_ad_channel_gets_the_same_album_and_text(monkeypatch):
             text, kwargs = rest
             assert text == _VIEW_PROMPT
             assert [b.url for b in _buttons(kwargs["reply_markup"])] == [
-                settings.listing_buy_url,
+                BUY,
                 "https://t.me/shop_bot",
             ]
 
@@ -119,12 +120,12 @@ async def test_single_image_is_one_captioned_photo_with_buttons(monkeypatch):
     _targets(monkeypatch, [(-1001, "A")])
     bot = FakeBot()
 
-    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT)
+    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT, BUY)
 
     (photo,) = bot.calls
     assert photo[:3] == ("photo", -1001, "f1")
     assert photo[3]["caption"] == "body"
-    assert _buttons(photo[3]["reply_markup"])[0].url == settings.listing_buy_url
+    assert _buttons(photo[3]["reply_markup"])[0].url == BUY
 
 
 @pytest.mark.asyncio
@@ -132,7 +133,7 @@ async def test_a_failing_channel_does_not_stop_the_others(monkeypatch):
     _targets(monkeypatch, [(-1001, "<Broken>"), (-1002, "Good")])
     bot = FakeBot(fail={-1001: RuntimeError("Forbidden: bot is not a member")})
 
-    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT)
+    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT, BUY)
 
     sent = [(kind, chat) for kind, chat, *_ in bot.calls]
     assert ("photo", -1002) in sent
@@ -149,7 +150,7 @@ async def test_no_ad_channels_means_nothing_is_sent(monkeypatch):
     _targets(monkeypatch, [])
     bot = FakeBot()
 
-    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT)
+    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT, BUY)
 
     assert bot.calls == []
 
@@ -159,7 +160,7 @@ async def test_unreadable_channel_list_warns_the_admin(monkeypatch):
     _targets(monkeypatch, RuntimeError("db down"))
     bot = FakeBot()
 
-    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT)
+    await _post_new_listing_to_channels(bot, 7, "body", None, ["f1"], ADMIN_CHAT, BUY)
 
     (warning,) = bot.calls
     assert warning[:2] == ("message", ADMIN_CHAT)
